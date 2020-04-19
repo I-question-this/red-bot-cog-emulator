@@ -1,6 +1,8 @@
 import discord
 import logging
 
+from pyboy import PyBoy
+
 from redbot.core import commands, Config
 from redbot.core.bot import Red
 
