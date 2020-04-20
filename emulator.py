@@ -24,7 +24,11 @@ log = logging.getLogger("red.emulator")
 
 _DEFAULT_GLOBAL = {
     "localpath": None,
-    "gamedefs": []
+    "gamedefs": [],
+    "registeredchannels": []
+}
+
+_DEFAULT_GUILD = {
 }
 
 class Emulator(commands.Cog):
@@ -37,6 +41,39 @@ class Emulator(commands.Cog):
         self.bot = bot
         self._conf = Config.get_conf(None, 1919191991919191, cog_name=f"{self.__class__.__name__}", force_registration=True)
         self._conf.register_global(**_DEFAULT_GLOBAL)
+
+
+    @commands.group()
+    @commands.guild_only()
+    async def guild(self, ctx: commands.Context):
+        """Guild commands"""
+
+
+    @guild.command(name="register")
+    async def guild_register(self, ctx: commands.Context, definition_name:str):
+        if not await self.does_definition_name_exist(definition_name):
+            info_msg = "```\n"
+            info_msg += f"{definition_name} does not exist\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Improper Definition Name"),
+                    description=_(info_msg))
+
+        for channel_id, def_name in await self._conf.registeredchannels():
+            if ctx.channel.id == channel_id:
+                info_msg = "```\n"
+                info_msg += f"This channel is already registered to \"{def_name}\"\n"
+                info_msg += "```\n"
+                return await self._embed_msg(ctx, title=_("Channel Already Register"),
+                        description=_(info_msg))
+
+        registeredchannels = await self._conf.registeredchannels()
+        registeredchannels.append([ctx.channel.id, definition_name])
+        await self._conf.registeredchannels.set(registeredchannels)
+        info_msg = "```\n"
+        info_msg += f"Registered this channel to {definition_name}\n"
+        info_msg += "```\n"
+        return await self._embed_msg(ctx, title=_("Channel Registered"),
+                description=_(info_msg))
 
 
     @commands.group()
@@ -154,6 +191,25 @@ class Emulator(commands.Cog):
             title=_("No Such Definition"),
             description=_(f"{name} does not exist.")
         )
+
+
+    # Helper Functions
+    async def does_definition_name_exist(self, definition_name: str):
+        for definition in await self._conf.gamedefs():
+            if definition[0] == definition_name:
+                return True
+        return False
+
+
+    async def filtered_registered_channel_ids(self, definition_name: str):
+        for channel_id, def_name in await self._conf.registeredchannels():
+            if def_name == definition_name:
+                yield channel_id
+
+
+    async def filtered_registered_channels(self, definition_name: str):
+        for channel_id in await self.filtered_registered_channel_ids(definition_name):
+            yield await self.get_channel(channel_id)
 
 
     # Path Related Functions
