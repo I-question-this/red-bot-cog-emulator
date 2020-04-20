@@ -120,6 +120,40 @@ class Emulator(commands.Cog):
             description=_(f"Definition was saved successfully.")
         )
 
+    @game.command(name="delete", aliases=["del"])
+    async def game_delete(self, ctx: commands.Context, name:str):
+        """Delete a defined game"""
+        for definition in await self._conf.gamedefs():
+            if definition[0] == name:
+                info_msg = _(
+                        "Are you sure you want to delete?:\n"
+                        "```\n"
+                        f"{definition[0]}\n"
+                        "```\n"
+                        )
+                info = await ctx.maybe_send_embed(info_msg)
+                start_adding_reactions(info, ReactionPredicate.YES_OR_NO_EMOJIS)
+                pred = ReactionPredicate.yes_or_no(info, ctx.author)
+                await ctx.bot.wait_for("reaction_add", check=pred)
+                # If user said no
+                if not pred.result:
+                    with contextlib.suppress(discord.HTTPException):
+                        await info.delete()
+                    return
+                else:
+                    await self._conf.gamedefs.set(list(filter(lambda d: d[0] != name, await self._conf.gamedefs())))
+                return await self._embed_msg(
+                    ctx,
+                    title=_("Deletion Successful"),
+                    description=_(f"{name} has been deleted.")
+                )
+
+        return await self._embed_msg(
+            ctx,
+            title=_("No Such Definition"),
+            description=_(f"{name} does not exist.")
+        )
+
 
     # Path Related Functions
     async def gb_path(self):
