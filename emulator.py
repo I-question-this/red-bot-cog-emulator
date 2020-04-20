@@ -1,3 +1,4 @@
+from collections import namedtuple
 import discord
 from discord.embeds import EmptyEmbed
 import logging
@@ -23,8 +24,12 @@ _ = Translator("Emulator", __file__)
 log = logging.getLogger("red.emulator")
 
 _DEFAULT_GLOBAL = {
-    "localpath": None
+    "localpath": None,
+    "gamedefs": []
 }
+
+GameDefinition=namedtuple("GameDefinition", ["name", "bootROM", "gameROM"])
+
 
 class Emulator(commands.Cog):
     """Emulator cog
@@ -38,11 +43,56 @@ class Emulator(commands.Cog):
         self._conf.register_global(**_DEFAULT_GLOBAL)
 
 
+    @commands.group()
+    @checks.is_owner()
+    async def game(self, ctx: commands.Context):
+        """Game commands"""
+
+
+    @game.command(name="list")
+    async def game_list(self, ctx: commands.Context):
+        """List available ROMs"""
+        info_msg = "```\ngb\n"
+        for name, path in [("boots", await self.boots_path()), ("games", await self.games_path())]:
+            if not os.path.exists(path):
+                info_msg += f"|__ {name} :negative_squared_cross_mark: \n"
+            else:
+                info_msg += f"|__ {name} \n"
+                items = list(os.listdir(path))
+                if len(items) == 0:
+                    info_msg += f"\t|__ <NOTHING> \n"
+                else:
+                    for item in items: 
+                        info_msg += f"\t|__ {item} \n"
+        info_msg += "```" 
+        # Translate it
+        info_msg = _(info_msg)
+
+
+        await self._embed_msg(ctx, title=_("Available ROMs"), description=info_msg)
+
+
+    # Path Related Functions
+    async def gb_path(self):
+        return os.path.join(await self._conf.localpath(), "gb")
+
+
+    async def boots_path(self):
+        return os.path.join(await self.gb_path(), "boots")
+
+
+    async def games_path(self):
+        return os.path.join(await self.gb_path(), "games")
+
+
+    async def saves_path(self):
+        return os.path.join(await self.gb_path(), "saves")
+
+
     @commands.command()
     @checks.is_owner()
     async def localpath(self, ctx: commands.Context, local_path=None):
         """Sets the path to look for ROMs
-        
         Leave blank to reset to the default.
         """
         if not local_path:
@@ -88,8 +138,7 @@ class Emulator(commands.Cog):
         # It exists, so we set it.
         await self._conf.localpath.set(local_path)
 
-        gb_path = os.path.join(local_path, "gb")
-        if not os.path.exists(gb_path):
+        if not os.path.exists(await self.gb_path()):
             warn_msg = _(
                     f"`{gb_path}` does not exist. "
                     "The path will still be saved, but please check the path and "
@@ -98,10 +147,9 @@ class Emulator(commands.Cog):
                 )
             await self._embed_msg(ctx, title=_("Invalid Environment"), description=warn_msg)
         else:
-            for subfolder in ["boots", "games", "saves"]:
-                subfolder_path = os.path.join(gb_path, subfolder)
-                if not os.path.exists(subfolder_path):
-                    os.mkdir(subfolder_path)
+            for subfolder in [await self.boots_path(), await self.games_path(), await self.saves_path()]:
+                if not os.path.exists(subfolder):
+                    os.mkdir(subfolder)
 
         return await self._embed_msg(
                 ctx,
