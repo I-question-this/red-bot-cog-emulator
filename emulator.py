@@ -49,7 +49,7 @@ class Emulator(commands.Cog):
     async def game_roms(self, ctx: commands.Context):
         """List available ROMs"""
         info_msg = "```\ngb\n"
-        for name, path in [("boots", await self.boots_path()), ("games", await self.games_path())]:
+        for name, path in [("boots", await self.boots_dir()), ("games", await self.games_dir())]:
             if not os.path.exists(path):
                 info_msg += f"|__ {name} :negative_squared_cross_mark: \n"
             else:
@@ -120,6 +120,7 @@ class Emulator(commands.Cog):
             description=_(f"Definition was saved successfully.")
         )
 
+
     @game.command(name="delete", aliases=["del"])
     async def game_delete(self, ctx: commands.Context, name:str):
         """Delete a defined game"""
@@ -160,23 +161,43 @@ class Emulator(commands.Cog):
         return os.path.join(await self._conf.localpath(), "gb")
 
 
-    async def boots_path(self):
+    async def boots_dir(self):
         return os.path.join(await self.gb_path(), "boots")
 
 
     async def bootROM_path(self, bootROM):
-        return os.path.join(await self.boots_path(), bootROM)
+        return os.path.join(await self.boots_dir(), bootROM)
 
 
-    async def games_path(self):
+    async def games_dir(self):
         return os.path.join(await self.gb_path(), "games")
 
     async def gameROM_path(self, gameROM):
-        return os.path.join(await self.games_path(), gameROM)
+        return os.path.join(await self.games_dir(), gameROM)
 
 
-    async def saves_path(self):
+    async def saves_dir(self):
         return os.path.join(await self.gb_path(), "saves")
+
+
+    async def save_definition_dir(self, def_name):
+        return os.path.join(await self.saves_dir(), def_name)
+
+
+    async def auto_save_dir(self, def_name):
+        return os.path.join(await self.saves_definition_dir(def_name), "auto")
+
+
+    async def auto_save_path(self, def_name, save_name):
+        return os.path.join(await self.auto_save_dir(def_name), save_name)
+
+
+    async def named_save_dir(self, def_name):
+        return os.path.join(await self.saves_definition_dir(def_name), "named")
+
+
+    async def named_save_path(self, def_name, save_name):
+        return os.path.join(await self.named_save_dir(def_name), save_name)
 
 
     @commands.command()
@@ -237,7 +258,7 @@ class Emulator(commands.Cog):
                 )
             await self._embed_msg(ctx, title=_("Invalid Environment"), description=warn_msg)
         else:
-            for subfolder in [await self.boots_path(), await self.games_path(), await self.saves_path()]:
+            for subfolder in [await self.boots_dir(), await self.games_dir(), await self.saves_dir()]:
                 if not os.path.exists(subfolder):
                     os.mkdir(subfolder)
 
