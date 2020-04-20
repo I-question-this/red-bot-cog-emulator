@@ -43,6 +43,31 @@ class Emulator(commands.Cog):
         self._conf.register_global(**_DEFAULT_GLOBAL)
 
 
+    # Getting input
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.message):
+        if isinstance(message.channel, discord.abc.PrivateChannel):
+            return
+        author = message.author
+        valid_user = isinstance(author, discord.Member) and not author.bot
+        if not valid_user:
+            return
+        if await self.bot.is_automod_immune(message):
+            return
+
+        registeredchannels = await self._conf.registeredchannels()
+        for channel_id, def_name in registeredchannels:
+            if message.channel.id == channel_id:
+                return await self._embed_msg(message.channel, title=_("TEST"),
+                        description=_("TEST"))
+
+
+    async def send_message_to_registered_channels(self, definition_name, **kwargs):
+        for channel in await self.filtered_registered_channels(definition_name):
+            self._embed_msg(channel, **kwargs)
+
+
+    # Commands
     @commands.group()
     @commands.guild_only()
     async def guild(self, ctx: commands.Context):
@@ -369,3 +394,4 @@ class Emulator(commands.Cog):
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
         return await ctx.send(embed=embed)
+
