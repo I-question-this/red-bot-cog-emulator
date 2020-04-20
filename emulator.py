@@ -58,7 +58,8 @@ class Emulator(commands.Cog):
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
                     description=_(info_msg))
 
-        for channel_id, def_name in await self._conf.registeredchannels():
+        registeredchannels = await self._conf.registeredchannels()
+        for channel_id, def_name in registeredchannels:
             if ctx.channel.id == channel_id:
                 info_msg = "```\n"
                 info_msg += f"This channel is already registered to \"{def_name}\"\n"
@@ -66,13 +67,32 @@ class Emulator(commands.Cog):
                 return await self._embed_msg(ctx, title=_("Channel Already Register"),
                         description=_(info_msg))
 
-        registeredchannels = await self._conf.registeredchannels()
         registeredchannels.append([ctx.channel.id, definition_name])
         await self._conf.registeredchannels.set(registeredchannels)
         info_msg = "```\n"
-        info_msg += f"Registered this channel to {definition_name}\n"
+        info_msg += f"Registered this channel to \"{definition_name}\"\n"
         info_msg += "```\n"
         return await self._embed_msg(ctx, title=_("Channel Registered"),
+                description=_(info_msg))
+
+
+    @guild.command(name="unregister")
+    async def guild_unregister(self, ctx: commands.Context):
+        registeredchannels = await self._conf.registeredchannels()
+        for channel_id, def_name in registeredchannels:
+            if ctx.channel.id == channel_id:
+                info_msg = "```\n"
+                info_msg += f"This channel has been unregistered from \"{def_name}\"\n"
+                info_msg += "```\n"
+                await self._conf.registeredchannels.set(
+                        list(filter(lambda rc: rc[0] != ctx.channel.id, registeredchannels)))
+                return await self._embed_msg(ctx, title=_("Channel Unregistered"),
+                        description=_(info_msg))
+
+        info_msg = "```\n"
+        info_msg += f"This channel isn't registered to anything\n"
+        info_msg += "```\n"
+        return await self._embed_msg(ctx, title=_("Channel Not Registered"),
                 description=_(info_msg))
 
 
