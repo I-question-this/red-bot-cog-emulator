@@ -1,4 +1,3 @@
-from collections import namedtuple
 import discord
 from discord.embeds import EmptyEmbed
 import logging
@@ -28,9 +27,6 @@ _DEFAULT_GLOBAL = {
     "gamedefs": []
 }
 
-GameDefinition=namedtuple("GameDefinition", ["name", "bootROM", "gameROM"])
-
-
 class Emulator(commands.Cog):
     """Emulator cog
     Allows users to play emulators together.
@@ -49,8 +45,8 @@ class Emulator(commands.Cog):
         """Game commands"""
 
 
-    @game.command(name="list")
-    async def game_list(self, ctx: commands.Context):
+    @game.command(name="ROMs", aliases=["roms"])
+    async def game_roms(self, ctx: commands.Context):
         """List available ROMs"""
         info_msg = "```\ngb\n"
         for name, path in [("boots", await self.boots_path()), ("games", await self.games_path())]:
@@ -68,8 +64,61 @@ class Emulator(commands.Cog):
         # Translate it
         info_msg = _(info_msg)
 
-
         await self._embed_msg(ctx, title=_("Available ROMs"), description=info_msg)
+
+
+    @game.command(name="definitions", aliases=["defs"])
+    async def game_definitions(self, ctx: commands.Context):
+        """List defined games"""
+        info_msg = "```\n"
+        if len(await self._conf.gamedefs()) == 0:
+            info_msg += "NONE"
+        else:
+            for definition in await self._conf.gamedefs():
+                info_msg += f"{definition[0]}:\n"
+                info_msg += f"\t|__Boot ROM: {definition[1]}\n"
+                info_msg += f"\t|__Game ROM: {definition[2]}\n"
+        info_msg += "```" 
+        # Translate it
+        info_msg = _(info_msg)
+        await self._embed_msg(ctx, title=_("Defined Games"), description=info_msg)
+
+
+    @game.command(name="set")
+    async def game_set(self, ctx: commands.Context, name:str, bootROM:str, gameROM:str):
+        """Set a defined game"""
+        # Check that the ROMs exist
+        if not os.path.exists(await self.bootROM_path(bootROM)):
+            return await self._embed_msg(
+                ctx,
+                title=_("Invalid Boot ROM"),
+                description=_(f"{bootROM} does not exist.")
+            )
+
+        if not os.path.exists(await self.gameROM_path(gameROM)):
+            return await self._embed_msg(
+                ctx,
+                title=_("Invalid Game ROM"),
+                description=_(f"{gameROM} does not exist.")
+            )
+
+        # Check that this name has not already been used
+        gamedefs = await self._conf.gamedefs()
+        for definition in gamedefs:
+            if definition[0] == name:
+                return await self._embed_msg(
+                    ctx,
+                    title=_("Name Conflict"),
+                    description=_(f"{name} already exist as a name.")
+                )
+        # Set the definition
+        gamedefs.append((name, bootROM, gameROM))
+        await self._conf.gamedefs.set(gamedefs)
+        return await self._embed_msg(
+            ctx,
+            title=_("Saved Definition"),
+            description=_(f"Definition was saved successfully.")
+        )
 
 
     # Path Related Functions
@@ -81,8 +130,15 @@ class Emulator(commands.Cog):
         return os.path.join(await self.gb_path(), "boots")
 
 
+    async def bootROM_path(self, bootROM):
+        return os.path.join(await self.boots_path(), bootROM)
+
+
     async def games_path(self):
         return os.path.join(await self.gb_path(), "games")
+
+    async def gameROM_path(self, gameROM):
+        return os.path.join(await self.games_path(), gameROM)
 
 
     async def saves_path(self):
