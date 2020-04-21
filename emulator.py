@@ -1,3 +1,9 @@
+"""
+Redbot Cog for Interfacing with Emulators
+~~~~~~~~~~~~~~~~~~~
+:copyright: (c) 2020 Tyler Westland
+:license: GPL-3.0, see LICENSE for more details.
+"""
 from datetime import datetime
 import discord
 from discord.embeds import EmptyEmbed
@@ -24,10 +30,10 @@ _ = Translator("Emulator", __file__)
 log = logging.getLogger("red.emulator")
 
 _DEFAULT_GLOBAL = {
-    "localpath": None,
-    "gamedefs": [],
-    "registeredchannels": [],
-    "autosaves": []
+    "local_path": None,
+    "game_defs": [],
+    "registerd_channels": [],
+    "auto_saves": []
 }
 
 
@@ -48,6 +54,10 @@ class Emulator(commands.Cog):
     # Getting input
     @commands.Cog.listener()
     async def on_message(self, message: discord.message):
+        """Listen to every message ever.
+        This is how the bot will respond to button pushes.
+        It will only respond if the message is sent within a registered channel though.
+        """
         if isinstance(message.channel, discord.abc.PrivateChannel):
             return
         author = message.author
@@ -57,16 +67,11 @@ class Emulator(commands.Cog):
         if await self.bot.is_automod_immune(message):
             return
 
-        registeredchannels = await self._conf.registeredchannels()
-        for channel_id, def_name in registeredchannels:
+        registerd_channels = await self._conf.registerd_channels()
+        for channel_id, def_name in registerd_channels:
             if message.channel.id == channel_id:
                 return await self._embed_msg(message.channel, title=_("TEST"),
                         description=_("TEST"))
-
-
-    async def send_message_to_registered_channels(self, definition_name, **kwargs):
-        for channel in await self.filtered_registered_channels(definition_name):
-            self._embed_msg(channel, **kwargs)
 
 
     # Commands
@@ -78,6 +83,13 @@ class Emulator(commands.Cog):
 
     @guild.command(name="register")
     async def guild_register(self, ctx: commands.Context, definition_name:str):
+        """Register the channel this message was sent from to the given game.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name of the game to register this channel to.
+        """
         if not await self.does_definition_name_exist(definition_name):
             info_msg = "```\n"
             info_msg += f"{definition_name} does not exist\n"
@@ -85,8 +97,8 @@ class Emulator(commands.Cog):
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
                     description=_(info_msg))
 
-        registeredchannels = await self._conf.registeredchannels()
-        for channel_id, def_name in registeredchannels:
+        registerd_channels = await self._conf.registerd_channels()
+        for channel_id, def_name in registerd_channels:
             if ctx.channel.id == channel_id:
                 info_msg = "```\n"
                 info_msg += f"This channel is already registered to \"{def_name}\"\n"
@@ -94,8 +106,8 @@ class Emulator(commands.Cog):
                 return await self._embed_msg(ctx, title=_("Channel Already Register"),
                         description=_(info_msg))
 
-        registeredchannels.append([ctx.channel.id, definition_name])
-        await self._conf.registeredchannels.set(registeredchannels)
+        registerd_channels.append([ctx.channel.id, definition_name])
+        await self._conf.registerd_channels.set(registerd_channels)
         info_msg = "```\n"
         info_msg += f"Registered this channel to \"{definition_name}\"\n"
         info_msg += "```\n"
@@ -105,14 +117,15 @@ class Emulator(commands.Cog):
 
     @guild.command(name="unregister")
     async def guild_unregister(self, ctx: commands.Context):
-        registeredchannels = await self._conf.registeredchannels()
-        for channel_id, def_name in registeredchannels:
+        """Unregiseter the channel this message is sent from."""
+        registerd_channels = await self._conf.registerd_channels()
+        for channel_id, def_name in registerd_channels:
             if ctx.channel.id == channel_id:
                 info_msg = "```\n"
                 info_msg += f"This channel has been unregistered from \"{def_name}\"\n"
                 info_msg += "```\n"
-                await self._conf.registeredchannels.set(
-                        list(filter(lambda rc: rc[0] != ctx.channel.id, registeredchannels)))
+                await self._conf.registerd_channels.set(
+                        list(filter(lambda rc: rc[0] != ctx.channel.id, registerd_channels)))
                 return await self._embed_msg(ctx, title=_("Channel Unregistered"),
                         description=_(info_msg))
 
@@ -125,12 +138,19 @@ class Emulator(commands.Cog):
 
     @commands.group()
     @checks.is_owner()
-    async def game(self, ctx: commands.Context):
-        """Game commands"""
+    async def setup(self, ctx: commands.Context):
+        """Setup commands"""
 
 
-    @game.command(name="stop")
-    async def game_stop(self, ctx: commands.Context, definition_name: str):
+    @setup.command(name="stop")
+    async def setup_stop(self, ctx: commands.Context, definition_name: str):
+        """Stop the given game.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name of the game to stop.
+        """
         def_info = await self.definition_name_information(definition_name)
         if def_info is None:
             info_msg = "```\n"
@@ -165,8 +185,15 @@ class Emulator(commands.Cog):
                 description=_(info_msg))
 
 
-    @game.command(name="start")
-    async def game_start(self, ctx: commands.Context, definition_name: str):
+    @setup.command(name="start")
+    async def setup_start(self, ctx: commands.Context, definition_name: str):
+        """Start the given game.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name of the game to start.
+        """
         def_info = await self.definition_name_information(definition_name)
         if def_info is None:
             info_msg = "```\n"
@@ -209,11 +236,13 @@ class Emulator(commands.Cog):
         # Save a screenshot
         screenshot_path = await self.screen_shots_save_path(definition_name, f"{datetime.now()}.gif")
         self._instances[definition_name].makeGIF(screenshot_path)
-        return await ctx.send(file=discord.File(screenshot_path))
+        await self.send_message_to_registered_channels(
+                definition_name, description=f"Started \"{definition_name}\"",
+                file=discord.File(screenshot_path))
 
 
-    @game.command(name="ROMs", aliases=["roms"])
-    async def game_roms(self, ctx: commands.Context):
+    @setup.command(name="ROMs", aliases=["roms"])
+    async def setup_roms(self, ctx: commands.Context):
         """List available ROMs"""
         info_msg = "```\ngb\n"
         for name, path in [("boots", await self.boots_dir()), ("games", await self.games_dir())]:
@@ -232,14 +261,14 @@ class Emulator(commands.Cog):
         await self._embed_msg(ctx, title=_("Available ROMs"), description=_(info_msg))
 
 
-    @game.command(name="definitions", aliases=["defs"])
-    async def game_definitions(self, ctx: commands.Context):
-        """List defined games"""
+    @setup.command(name="definitions", aliases=["defs"])
+    async def setup_definitions(self, ctx: commands.Context):
+        """List defined games."""
         info_msg = "```\n"
-        if len(await self._conf.gamedefs()) == 0:
+        if len(await self._conf.game_defs()) == 0:
             info_msg += "NONE"
         else:
-            for definition in await self._conf.gamedefs():
+            for definition in await self._conf.game_defs():
                 info_msg += f"{definition[0]}:\n"
                 info_msg += f"\t|__Boot ROM: {definition[1]}\n"
                 info_msg += f"\t|__Game ROM: {definition[2]}\n"
@@ -247,9 +276,19 @@ class Emulator(commands.Cog):
         await self._embed_msg(ctx, title=_("Defined Games"), description=_(info_msg))
 
 
-    @game.command(name="set")
-    async def game_set(self, ctx: commands.Context, name:str, bootROM:str, gameROM:str):
-        """Set a defined game"""
+    @setup.command(name="set")
+    async def setup_set(self, ctx: commands.Context, name:str, bootROM:str, gameROM:str):
+        """Set a defined game.
+
+        Parameters
+        ----------
+        name: str
+            Name for this game definition. Must be unique.
+        bootROM: str
+           Boot ROM for this game. Must actually exist. 
+        gameROM: str
+           Game ROM for this game. Must actually exist. 
+        """
         # Check that the ROMs exist
         if not os.path.exists(await self.bootROM_path(bootROM)):
             return await self._embed_msg(
@@ -266,8 +305,8 @@ class Emulator(commands.Cog):
             )
 
         # Check that this name has not already been used
-        gamedefs = await self._conf.gamedefs()
-        for definition in gamedefs:
+        game_defs = await self._conf.game_defs()
+        for definition in game_defs:
             if definition[0] == name:
                 return await self._embed_msg(
                     ctx,
@@ -275,8 +314,8 @@ class Emulator(commands.Cog):
                     description=_(f"{name} already exist as a name.")
                 )
         # Set the definition
-        gamedefs.append((name, bootROM, gameROM))
-        await self._conf.gamedefs.set(gamedefs)
+        game_defs.append((name, bootROM, gameROM))
+        await self._conf.game_defs.set(game_defs)
         return await self._embed_msg(
             ctx,
             title=_("Saved Definition"),
@@ -284,11 +323,19 @@ class Emulator(commands.Cog):
         )
 
 
-    @game.command(name="delete", aliases=["del"])
-    async def game_delete(self, ctx: commands.Context, name:str):
-        """Delete a defined game"""
-        for definition in await self._conf.gamedefs():
-            if definition[0] == name:
+    @setup.command(name="delete", aliases=["del"])
+    async def setup_delete(self, ctx: commands.Context, definition_name:str):
+        """Delete a defined game
+
+        Note that this does delete any files or folders.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name of the game to delete.
+        """
+        for definition in await self._conf.game_defs():
+            if definition[0] == definition_name:
                 info_msg = _(
                         "Are you sure you want to delete?:\n"
                         "```\n"
@@ -305,11 +352,11 @@ class Emulator(commands.Cog):
                         await info.delete()
                     return
                 else:
-                    await self._conf.gamedefs.set(list(filter(lambda d: d[0] != name, await self._conf.gamedefs())))
+                    await self._conf.game_defs.set(list(filter(lambda d: d[0] != definition_name, await self._conf.game_defs())))
                 return await self._embed_msg(
                     ctx,
                     title=_("Deletion Successful"),
-                    description=_(f"{name} has been deleted.")
+                    description=_(f"{definition_name} has been deleted.")
                 )
 
         return await self._embed_msg(
@@ -319,90 +366,23 @@ class Emulator(commands.Cog):
         )
 
 
-    # Helper Functions
-    async def definition_name_information(self, definition_name: str):
-        for definition in await self._conf.gamedefs():
-            if definition[0] == definition_name:
-                return definition
-        return None
 
 
-    async def does_definition_name_exist(self, definition_name: str):
-        return self.definition_name_information(definition_name) is not None
-
-
-    async def filtered_registered_channel_ids(self, definition_name: str):
-        for channel_id, def_name in await self._conf.registeredchannels():
-            if def_name == definition_name:
-                yield channel_id
-
-
-    async def filtered_registered_channels(self, definition_name: str):
-        for channel_id in await self.filtered_registered_channel_ids(definition_name):
-            yield await self.get_channel(channel_id)
-
-
-    # Path Related Functions
-    async def gb_path(self):
-        return os.path.join(await self._conf.localpath(), "gb")
-
-
-    async def boots_dir(self):
-        return os.path.join(await self.gb_path(), "boots")
-
-
-    async def bootROM_path(self, bootROM):
-        return os.path.join(await self.boots_dir(), bootROM)
-
-
-    async def games_dir(self):
-        return os.path.join(await self.gb_path(), "games")
-
-
-    async def gameROM_path(self, gameROM):
-        return os.path.join(await self.games_dir(), gameROM)
-
-
-    async def saves_dir(self):
-        return os.path.join(await self.gb_path(), "saves")
-
-
-    async def saves_definition_dir(self, def_name):
-        return os.path.join(await self.saves_dir(), def_name)
-
-
-    async def auto_save_dir(self, def_name):
-        return os.path.join(await self.saves_definition_dir(def_name), "auto")
-
-
-    async def auto_save_path(self, def_name, save_name):
-        return os.path.join(await self.auto_save_dir(def_name), save_name)
-
-
-    async def named_save_dir(self, def_name):
-        return os.path.join(await self.saves_definition_dir(def_name), "named")
-
-
-    async def named_save_path(self, def_name, save_name):
-        return os.path.join(await self.named_save_dir(def_name), save_name)
-
-
-    async def screen_shots_save_dir(self, def_name):
-        return os.path.join(await self.saves_definition_dir(def_name), "screen_shots")
-
-
-    async def screen_shots_save_path(self, def_name, save_name):
-        return os.path.join(await self.screen_shots_save_dir(def_name), save_name)
-
-
-    @commands.command()
+    @setup.command(name="localpath")
     @checks.is_owner()
-    async def localpath(self, ctx: commands.Context, local_path=None):
+    async def setup_local_path(self, ctx: commands.Context, local_path:str=None):
         """Sets the path to look for ROMs
+
         Leave blank to reset to the default.
+
+        Parameters
+        ----------
+        local_path: str
+           Path to set the local path to.
+           If unset it will be reset to the default.
         """
         if not local_path:
-            await self._conf.localpath.set(str(cog_data_path()))
+            await self._conf.local_path.set(str(cog_data_path()))
             return await self._embed_msg(
                 ctx,
                 title=_("Setting Changed"),
@@ -442,7 +422,7 @@ class Emulator(commands.Cog):
                 description=_(f"{local_path} does not seem like a valid path.")
             )
         # It exists, so we set it.
-        await self._conf.localpath.set(local_path)
+        await self._conf.local_path.set(local_path)
 
         if not os.path.exists(await self.gb_path()):
             warn_msg = _(
@@ -472,8 +452,16 @@ class Emulator(commands.Cog):
 
     @saves.command(name="list")
     async def saves_list(self, ctx: commands.Context, definition_name:str=None):
+        """Display the list of save files.
+
+        Parameters
+        ----------
+        definition_name: str
+            If set it will only show the save files for the given name.
+            If not set it will show all save files.
+        """
         info_msg = "```\ngb\n"
-        for def_name, bootROM, gameROM in await self._conf.gamedefs():
+        for def_name, bootROM, gameROM in await self._conf.game_defs():
             if definition_name is not None:
                 if def_name != definition_name:
                     continue
@@ -495,7 +483,242 @@ class Emulator(commands.Cog):
         await self._embed_msg(ctx, title=_("Save Files"), description=_(info_msg))
 
 
+    # Helper Functions
+    async def definition_name_information(self, definition_name: str):
+        """Returns the information for the given definition name
+
+        Parameters
+        ----------
+        definition_name: str
+            The name to find the information for.
+            If it doesn't exist it will return None
+        """
+        for definition in await self._conf.game_defs():
+            if definition[0] == definition_name:
+                return definition
+        return None
+
+
+    async def does_definition_name_exist(self, definition_name: str):
+        """Returns True if definition_name exists, false otherwise.
+
+        Parameters
+        ----------
+        definition_name: str
+            The name to determne the existence of.
+        """
+        return self.definition_name_information(definition_name) is not None
+
+
+    async def filtered_registered_channel_ids(self, definition_name: str):
+        """Returns a generator of the registered channel ids for the given definition name
+
+        Parameters
+        ----------
+        definition_name: str
+            The name to find the regiestered channel ids for.
+        """
+        for channel_id, def_name in await self._conf.registerd_channels():
+            if def_name == definition_name:
+                yield channel_id
+
+
+    async def filtered_registered_channels(self, definition_name: str):
+        """Returns a generator of the registered channel objects for the given definition name
+
+        Parameters
+        ----------
+        definition_name: str
+            The name to find the regiestered channel objects for.
+        """
+        async for channel_id in self.filtered_registered_channel_ids(definition_name):
+            yield self.bot.get_channel(channel_id)
+
+
+    # Path Related Functions
+    async def gb_path(self):
+        """Return '<local_path>/gb'
+
+        Note this function does not check if this path exists.
+        """
+        return os.path.join(await self._conf.local_path(), "gb")
+
+
+    async def boots_dir(self):
+        """Return '<local_path>/gb/boots'
+
+        Note this function does not check if this path exists.
+        """
+        return os.path.join(await self.gb_path(), "boots")
+
+
+    async def bootROM_path(self, bootROM:str):
+        """Return '<local_path>/gb/boots/<bootROM>'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        bootROM: str
+            The name of the boot ROM to get the full path of.
+        """
+        return os.path.join(await self.boots_dir(), bootROM)
+
+
+    async def games_dir(self):
+        """Return '<local_path>/gb/games'
+
+        Note this function does not check if this path exists.
+        """
+        return os.path.join(await self.gb_path(), "games")
+
+
+    async def gameROM_path(self, gameROM):
+        """Return '<local_path>/gb/games/<gameROM>'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        gameROM: str
+            The name of the game ROM to get the full path of.
+        """
+        return os.path.join(await self.games_dir(), gameROM)
+
+
+    async def saves_dir(self):
+        """Return '<local_path>/gb/saves'
+
+        Note this function does not check if this path exists.
+        """
+        return os.path.join(await self.gb_path(), "saves")
+
+
+    async def saves_definition_dir(self, def_name):
+        """Return '<local_path>/gb/saves/<def_name>'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        def_name: str
+            The save directory for the given game definition name.
+        """
+        return os.path.join(await self.saves_dir(), def_name)
+
+
+    async def auto_save_dir(self, def_name):
+        """Return '<local_path>/gb/saves/<def_name>/auto'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        def_name: str
+            The auto save directory for the given game definition name.
+        """
+        return os.path.join(await self.saves_definition_dir(def_name), "auto")
+
+
+    async def auto_save_path(self, def_name, save_name):
+        """Return '<local_path>/gb/saves/<def_name>/auto/<save_name>'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        def_name: str
+            The named save directory for the given game definition name.
+        save_name: str
+            The save file name.
+        """
+        return os.path.join(await self.auto_save_dir(def_name), save_name)
+
+
+    async def named_save_dir(self, def_name):
+        """Return '<local_path>/gb/saves/<def_name>/named'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        def_name: str
+            The named save directory for the given game definition name.
+        """
+        return os.path.join(await self.saves_definition_dir(def_name), "named")
+
+
+    async def named_save_path(self, def_name, save_name):
+        """Return '<local_path>/gb/saves/<def_name>/named/<save_name>'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        def_name: str
+            The named save directory for the given game definition name.
+        save_name: str
+            The save file name.
+        """
+        return os.path.join(await self.named_save_dir(def_name), save_name)
+
+
+    async def screen_shots_save_dir(self, def_name):
+        """Return '<local_path>/gb/saves/<def_name>/screen_shots'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        def_name: str
+            The screen_shot save directory for the given game definition name.
+        """
+        return os.path.join(await self.saves_definition_dir(def_name), "screen_shots")
+
+
+    async def screen_shots_save_path(self, def_name, screen_shot_name):
+        """Return '<local_path>/gb/saves/<def_name>/screen_shots/<save_name>'
+
+        Note this function does not check if this path exists.
+
+        Parameters
+        ----------
+        def_name: str
+            The screen shots save directory for the given game definition name.
+        screen_shot_name: str
+            The screen shot file name.
+        """
+        return os.path.join(await self.screen_shots_save_dir(def_name), screen_shot_name)
+
+
+    async def send_message_to_registered_channels(self, definition_name:str, **kwargs):
+        """Send a message to every registered channel to the given definition name
+
+        Parameters
+        ----------
+        definition_name: str
+            The name of the game being played by channels.
+            Note that this function does not check if it exists, so it will
+            simply send to no channels if it doesn't exist. This is because
+            it is intended to be used by other functions that do check if the 
+            given definition_name exists.
+        """
+        async for channel in self.filtered_registered_channels(definition_name):
+            await self._embed_msg(channel, **kwargs)
+
+
     async def _embed_msg(self, ctx: commands.Context, **kwargs):
+        """Assemble and send an embedded message.
+
+        Parameters
+        ----------
+        definition_name: str
+            The name of the game being played by channels.
+            Note that this function does not check if it exists, so it will
+            simply send to no channels if it doesn't exist. This is because
+            it is intended to be used by other functions that do check if the 
+            given definition_name exists.
+        """
         colour = kwargs.get("colour") or kwargs.get("color") or await self.bot.get_embed_color(ctx)
         error = kwargs.get("error", False)
         success = kwargs.get("success", False)
@@ -519,5 +742,7 @@ class Emulator(commands.Cog):
             embed.set_footer(text=footer)
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
+        if file:
+            embed.set_image(url=f"attachment://{file.filename}")
         return await ctx.send(embed=embed, file=file)
 
