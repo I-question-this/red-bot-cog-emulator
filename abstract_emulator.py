@@ -1,7 +1,7 @@
 """
 Abstract contract of what a controller should do.
 ~~~~~~~~~~~~~~~~~~~
-:copyright: (c) 2019 i-question-this
+:copyright: (c) 2020 Tyler Westland
 :license: GPL-3.0, see LICENSE for more details.
 """
 from abc import ABC, abstractmethod
@@ -10,7 +10,7 @@ from PIL import Image
 from typing import List
 import math
 
-log = logging.getLogger("red.emulator.abstract_emulator")
+log = logging.getLogger("red.emulator")
 
 # Exceptions for this class
 class AlreadyRunning(Exception):
@@ -31,6 +31,7 @@ class NoScreenShotFramesSaved(Exception):
   pass
 
 
+
 class NotRunning(Exception):
   """Thrown when a controller is not running an emulator"""
   pass
@@ -48,25 +49,59 @@ class ButtonCode:
 
 class AbastractEmulator(ABC):
   """Represents how a controller should behave"""
-  # Buttons  
-  __buttons = {}
+  # Magic Methods
+  def __init__(self, fps:int=60):
+    # Save information
+    self._fps = fps
+    self.__screenShots = [] 
+    self.__buttons = {}
 
   @property
   def buttonNames(self) -> List[str]:
+    """Returns button names
+
+    Returns
+    -------
+    list[str]
+        List of button names
+    """
     return [buttonName.lower() for buttonName in self.__buttons.keys()]
 
 
   @abstractmethod
   def _abstractHoldButton(self, button:ButtonCode, numberOfSeconds:float) -> None:
+    """An abstract function for holding a button.
+
+    Parameters
+    ----------
+    button: ButtonCode
+        Button to be held down.
+    numberOfSeconds: float
+        Number of seconds to hold this button.
+    """
     pass
 
 
   @abstractmethod
   def _abstractPressButton(self, button:ButtonCode) -> None:
+    """An abstract method for pressing the specified button.
+
+    Parameters
+    ----------
+    button: ButtonCode
+        Button to be pressed.
+    """
     pass
 
 
-  def _getButton(self, buttonName: str) -> None:
+  def _getButton(self, buttonName: str) -> ButtonCode:
+    """Return the button code of the given name.
+
+    Parameters
+    ----------
+    buttonName: str
+        Name of the button to get the code of.
+    """
     try:
       return self.__buttons[buttonName.lower()]
     except KeyError:
@@ -78,48 +113,61 @@ class AbastractEmulator(ABC):
 
 
   def holdButton(self, buttonName:str, numberOfSeconds:float) -> None:
+    """Holds the specified button for the specified time.
+
+    Parameters
+    ----------
+    button: ButtonCode
+        Button to be held down.
+    numberOfSeconds: float
+        Number of seconds to hold this button.
+    """
     self.assertIsRunning()
     if numberOfSeconds < 0:
         raise ValueError("numberOfSeconds must be greater than 0")
     button = self._getButton(buttonName)
-
-    log.info("{}: Holding button {} for {} seconds".format(
-      self.__class__.__name__,
-      button.name,
-      numberOfSeconds
-    ))
     self._abstractHoldButton(button, numberOfSeconds)
 
 
   def pressButton(self, buttonName:str) -> None:
+    """Presses the specified button.
+
+    Parameters
+    ----------
+    button: ButtonCode
+        Button to be pressed.
+    """
     self.assertIsRunning()
     button = self._getButton(buttonName)
-
-    log.info("{}: Pressing button {}".format(
-      self.__class__.__name__,
-      button.name
-    ))
     self._abstractPressButton(button)
 
 
   def _registerButton(self, button:ButtonCode) -> None:
+    """Register a button to this emulator.
+
+    Parameters
+    ----------
+    button: ButtonCode
+       Button to register to this emulator. 
+    """
     self.__buttons[button.name.lower()] = button
 
   
-  # Magic Methods
-  def __init__(self, fps:int=60):
-    # Save information
-    self._fps = fps
-    self.__screenShots = [] 
-
-
   # Running
   @abstractmethod
   def _runForOneFrame(self) -> None:
+    """Abstract method for running one frame"""
     pass
 
 
   def runForXFrames(self, numberOfFrames:int) -> None:
+    """Run X frames
+
+    Parameters
+    ----------
+    numberOfFrames: int
+        Number of frames to run.
+    """
     if numberOfFrames < 0:
       raise ValueError("numberOfFrames must 0 or more")
 
@@ -128,18 +176,19 @@ class AbastractEmulator(ABC):
     if numberOfFrames == 0:
       return
 
-    log.info("{}: Running for {} frames, aka {} seconds".format(
-      self.__class__.__name__, 
-      numberOfFrames, 
-      numberOfFrames / self._fps
-    ))
-
     for _ in range(numberOfFrames):
       self._runForOneFrame()
       self._takeScreenShot()
 
 
   def runForXSeconds(self, numberOfSeconds:int) -> None:
+    """Run X seconds
+
+    Parameters
+    ----------
+    numberOfSeconds: int
+        Number of seconds to run.
+    """
     if numberOfSeconds < 0:
       raise ValueError("numberOfSeconds must 0 or more")
 
@@ -152,19 +201,29 @@ class AbastractEmulator(ABC):
   # Screenshots
   @abstractmethod
   def _abstractTakeScreenShot(self) -> Image:
+    """Abstract method to take a screen shot of the emulator
+
+    Returns
+    -------
+    Image
+        The screen shot of the emulator
+    """
     pass
 
 
   def makeGIF(self, filePath) -> None:
+    """Make a GIF from the stored screen shots of this emulator.
+
+    Parameters
+    -------
+    filePath: str
+        File path to save the created GIF in.
+    """
     self.assertIsRunning()
 
     if len(self.__screenShots) == 0:
       raise NoScreenShotFramesSaved()
 
-    log.info("{}: Creating screenshot GIF".format(
-      self.__class__.__name__
-    ))
-    
     self.__screenShots[0].save(
       filePath,
       format='GIF',
@@ -177,6 +236,7 @@ class AbastractEmulator(ABC):
 
     
   def _takeScreenShot(self) -> None:
+    """Take and save a screen shot of the emulator"""
     self.assertIsRunning()
     self.__screenShots.append(self._abstractTakeScreenShot())
 
@@ -185,11 +245,33 @@ class AbastractEmulator(ABC):
   # Starting
   @abstractmethod
   def _abstractStart(self, gameROMPath:str, bootROMPath:str=None) -> None:
+    """Abstract method for starting the emulator.
+
+    Parameters
+    ----------
+    gameROM: str
+        File path to the game ROM to use.
+    bootROM: str
+        File path to the boot ROM to use.
+    """
     pass
   
 
   def start(self, gameROMPath:str, bootROMPath:str=None,
-      saveStateFilePath:str=None, numberOfSecondsToRun:int=60) -> None:
+      saveStateFilePath:str=None, numberOfSecondsToRun:float=60) -> None:
+    """Start the emulator.
+
+    Parameters
+    ----------
+    gameROM: str
+        File path to the game ROM to use.
+    bootROM: str
+        File path to the boot ROM to use.
+    saveStateFilePath: str
+        File path of the save state file to load after start up.
+    numberOfSecondsToRun: float
+        Number of seconds to run after start up.
+    """
     if numberOfSecondsToRun < 0:
       raise ValueError("numberOfSecondsToRun must be 0 or more")
 
@@ -205,11 +287,19 @@ class AbastractEmulator(ABC):
 
   # Stopping 
   @abstractmethod
-  def _abstractStop(self):
+  def _abstractStop(self) -> None:
+    """Abstract method for stopping the emulator"""
     pass
 
 
-  def stop(self, saveStateFilePath:str=None):
+  def stop(self, saveStateFilePath:str=None) -> None:
+    """Method for stopping the emulator
+
+    Parameters
+    ----------
+    saveStateFilePath: str
+        File path to save the state to before shutting down.
+    """
     self.assertIsRunning()
 
     if saveStateFilePath is not None:
@@ -220,16 +310,31 @@ class AbastractEmulator(ABC):
   # State Management
   @abstractmethod
   def saveState(self, saveStateFilePath:str) -> None:
-      pass
+    """Save the state of the emulator.
+    
+    Parameters
+    ----------
+    saveStateFilePath: str
+        File path of the save the state to.
+    """
+    pass
 
 
   @abstractmethod
   def loadState(self, saveStateFilePath:str) -> None:
-      pass
+    """Load the given state of the emulator.
+    
+    Parameters
+    ----------
+    saveStateFilePath: str
+        File path of the state file to load.
+    """
+    pass
 
 
   # Status
   def assertIsRunning(self) -> None:
+    """Assert that the emulator is running"""
     if not self.isRunning:
       log.critical("{}: Emulator is not running".format(
         self.__class__.__name__
@@ -238,6 +343,7 @@ class AbastractEmulator(ABC):
 
 
   def assertNotRunning(self) -> None:
+    """Assert that the emulator is NOT running"""
     if self.isRunning:
       log.critical("{}: Emulator is already running".format(
         self.__class__.__name__
@@ -248,5 +354,12 @@ class AbastractEmulator(ABC):
   @property
   @abstractmethod
   def isRunning(self) -> bool:
+    """Return boolean as to if the emulator is running.
+
+    Returns
+    -------
+    bool
+        True if the emulator is running, False otherwise.
+    """
     pass
 
