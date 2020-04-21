@@ -1,7 +1,7 @@
 """
 Controller Interface For PyBoy
 ~~~~~~~~~~~~~~~~~~~
-:copyright: (c) 2019 i-question-this
+:copyright: (c) 2020 Tyler Westland
 :license: GPL-3.0, see LICENSE for more details.
 """
 import logging
@@ -10,29 +10,36 @@ from PIL import Image
 from pyboy import windowevent, PyBoy
 from .abstract_emulator import ButtonCode, AbastractEmulator
 
-log = logging.getLogger("red.emulator.gameboy")
+log = logging.getLogger("red.emulator")
 
 
 class GameBoy(AbastractEmulator):
   # Buttons
   def _abstractHoldButton(self, button:ButtonCode, numberOfSeconds:float) -> None:
-    """Holds the specified button for the specififed time
+    """Holds the specified button for the specified time.
+
+    Parameters
+    ----------
+    button: ButtonCode
+        Button to be held down.
+    numberOfSeconds: float
+        Number of seconds to hold this button.
     """
-    log.info("PyBoy: Pressing button: {}".format(button.name))
     self._pyboy.sendInput(button.pressCode)
     self.runForXSeconds(numberOfSeconds)
-    log.info("PyBoy: Releasing button: {}".format(button.name))
     self._pyboy.sendInput(button.releaseCode)
     self.runForXSeconds(1)
 
 
   def _abstractPressButton(self, button:ButtonCode) -> None:
-    """Presses the specified button
+    """Presses the specified button.
+
+    Parameters
+    ----------
+    button: ButtonCode
     """
-    log.info("PyBoy: Pressing button: {}".format(button.name))
     self._pyboy.sendInput(button.pressCode)
     self.runForXFrames(2)
-    log.info("PyBoy: Releasing button: {}".format(button.name))
     self._pyboy.sendInput(button.releaseCode)
     self.runForXSeconds(1)
     
@@ -106,38 +113,73 @@ class GameBoy(AbastractEmulator):
 
   # Running
   def _runForOneFrame(self) -> None:
+    """Runs the PyBoy for one tick/frame"""
     self._pyboy.tick()
 
 
   # Screenshots
   def _abstractTakeScreenShot(self) -> Image:
     """Takes screen shot of emulator
+
+    Returns
+    -------
+    Image
+        Image object of the screen shot.
     """
     return self._pyboy.get_screen_image()
 
 
   # Starting
-  def _abstractStart(self, gameROM, bootROM):
+  def _abstractStart(self, gameROM, bootROM) -> None:
+    """Start the PyBoy emulator.
+
+    Parameters
+    ----------
+    gameROM: str
+        File path to the game ROM to use.
+    bootROM: str
+        File path to the boot ROM to use.
+    """
     self._pyboy = PyBoy(gameROM, default_ram_file=bootROM, window_type="headless")
     self._pyboy.set_emulation_speed(False)
 
 
   # Stopping
   def _abstractStop(self) -> None:
+    """Stop the PyBoy emulator"""
     self._pyboy.stop(save=True)
     self._pyboy = None
 
 
   # State Management
   def loadState(self, saveStateFilePath:str) -> None:
+      """Load a save state file.
+
+      Parameters:
+      saveStateFilePath: str
+        File path to the state file to load.
+      """
       self._pyboy.loadState(saveStateFilePath)
 
 
   def saveState(self, saveStateFilePath:str) -> None:
+      """Save a save state file.
+
+      Parameters:
+      saveStateFilePath: str
+        File path to the state file to save.
+      """
       self._pyboy.saveState(saveStateFilePath)
 
   # Status
   @property
   def isRunning(self) -> bool:
+    """Return True if the PyBoy emulator is running, False otherwise.
+
+    Returns
+    -------
+    bool
+        if the PyBoy emulator is running.
+    """
     return self._pyboy is not None
 
