@@ -37,6 +37,7 @@ class GameBoy(AbastractEmulator):
     Parameters
     ----------
     button: ButtonCode
+        Button to be pressed.
     """
     self._pyboy.sendInput(button.pressCode)
     self.runForXFrames(2)
