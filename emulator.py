@@ -1,9 +1,9 @@
-import datetime
+from datetime import datetime
 import discord
 from discord.embeds import EmptyEmbed
 import logging
 import os
-from pyboy import PyBoy
+from .gameBoy import GameBoy
 
 from redbot.core import checks, commands, Config
 from redbot.core.bot import Red
@@ -42,6 +42,7 @@ class Emulator(commands.Cog):
         self.bot = bot
         self._conf = Config.get_conf(None, 1919191991919191, cog_name=f"{self.__class__.__name__}", force_registration=True)
         self._conf.register_global(**_DEFAULT_GLOBAL)
+        self._instances = {}
 
 
     # Getting input
@@ -126,6 +127,89 @@ class Emulator(commands.Cog):
     @checks.is_owner()
     async def game(self, ctx: commands.Context):
         """Game commands"""
+
+
+    @game.command(name="stop")
+    async def game_stop(self, ctx: commands.Context, definition_name: str):
+        def_info = await self.definition_name_information(definition_name)
+        if def_info is None:
+            info_msg = "```\n"
+            info_msg += f"{definition_name} does not exist\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Improper Definition Name"),
+                    description=_(info_msg))
+
+        # Does an instance acutally exist?
+        if self._instances.get(definition_name, None) is None:
+            info_msg = "```\n"
+            info_msg += f"{definition_name} has no instance running\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Instance Not Running"),
+                    description=_(info_msg))
+        
+        # Is the instance actually running?
+        if not self._instances[definition_name].isRunning:
+            info_msg = "```\n"
+            info_msg += f"{definition_name} has no instance running\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Instance Not Running"),
+                    description=_(info_msg))
+
+        # Stop the instance
+        self._instances[definition_name].stop()
+        del self._instances[definition_name]
+        info_msg = "```\n"
+        info_msg += f"{definition_name} has been stopped.\n"
+        info_msg += "```\n"
+        return await self._embed_msg(ctx, title=_("Instance Stopped"),
+                description=_(info_msg))
+
+
+    @game.command(name="start")
+    async def game_start(self, ctx: commands.Context, definition_name: str):
+        def_info = await self.definition_name_information(definition_name)
+        if def_info is None:
+            info_msg = "```\n"
+            info_msg += f"{definition_name} does not exist\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Improper Definition Name"),
+                    description=_(info_msg))
+
+        # Does an instance already exist?
+        if self._instances.get(definition_name, None) is None:
+            self._instances[definition_name] = GameBoy()
+        
+        # Is one already running?
+        if self._instances[definition_name].isRunning:
+            info_msg = "```\n"
+            info_msg += f"{definition_name} already has an instance running\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Instance is Already Running"),
+                    description=_(info_msg))
+
+        # Perhaps the first time
+        if not os.path.exists(await self.saves_definition_dir(definition_name)):
+            os.mkdir(await self.saves_definition_dir(definition_name))
+
+        if not os.path.exists(await self.auto_save_dir(definition_name)):
+            os.mkdir(await self.auto_save_dir(definition_name))
+
+        if not os.path.exists(await self.named_save_dir(definition_name)):
+            os.mkdir(await self.named_save_dir(definition_name))
+
+        if not os.path.exists(await self.screen_shots_save_dir(definition_name)):
+            os.mkdir(await self.screen_shots_save_dir(definition_name))
+
+        # Time to start
+        self._instances[definition_name].start(
+                gameROMPath=await self.gameROM_path(def_info[2]),
+                bootROMPath=await self.bootROM_path(def_info[1])
+            )
+
+        # Save a screenshot
+        screenshot_path = await self.screen_shots_save_path(definition_name, f"{datetime.now()}.gif")
+        self._instances[definition_name].makeGIF(screenshot_path)
+        return await ctx.send(file=discord.File(screenshot_path))
 
 
     @game.command(name="ROMs", aliases=["roms"])
@@ -236,11 +320,15 @@ class Emulator(commands.Cog):
 
 
     # Helper Functions
-    async def does_definition_name_exist(self, definition_name: str):
+    async def definition_name_information(self, definition_name: str):
         for definition in await self._conf.gamedefs():
             if definition[0] == definition_name:
-                return True
-        return False
+                return definition
+        return None
+
+
+    async def does_definition_name_exist(self, definition_name: str):
+        return self.definition_name_information(definition_name) is not None
 
 
     async def filtered_registered_channel_ids(self, definition_name: str):
@@ -270,6 +358,7 @@ class Emulator(commands.Cog):
     async def games_dir(self):
         return os.path.join(await self.gb_path(), "games")
 
+
     async def gameROM_path(self, gameROM):
         return os.path.join(await self.games_dir(), gameROM)
 
@@ -296,6 +385,14 @@ class Emulator(commands.Cog):
 
     async def named_save_path(self, def_name, save_name):
         return os.path.join(await self.named_save_dir(def_name), save_name)
+
+
+    async def screen_shots_save_dir(self, def_name):
+        return os.path.join(await self.saves_definition_dir(def_name), "screen_shots")
+
+
+    async def screen_shots_save_path(self, def_name, save_name):
+        return os.path.join(await self.screen_shots_save_dir(def_name), save_name)
 
 
     @commands.command()
@@ -409,6 +506,7 @@ class Emulator(commands.Cog):
         timestamp = kwargs.get("timestamp")
         footer = kwargs.get("footer")
         thumbnail = kwargs.get("thumbnail")
+        file = kwargs.get("file")
         contents = dict(title=title, type=_type, url=url, description=description)
         embed = kwargs.get("embed").to_dict() if hasattr(kwargs.get("embed"), "to_dict") else {}
         colour = embed.get("color") if embed.get("color") else colour
@@ -421,5 +519,5 @@ class Emulator(commands.Cog):
             embed.set_footer(text=footer)
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
-        return await ctx.send(embed=embed)
+        return await ctx.send(embed=embed, file=file)
 
