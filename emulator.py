@@ -1,3 +1,4 @@
+import datetime
 import discord
 from discord.embeds import EmptyEmbed
 import logging
@@ -25,11 +26,11 @@ log = logging.getLogger("red.emulator")
 _DEFAULT_GLOBAL = {
     "localpath": None,
     "gamedefs": [],
-    "registeredchannels": []
+    "registeredchannels": [],
+    "autosaves": []
 }
 
-_DEFAULT_GUILD = {
-}
+
 
 class Emulator(commands.Cog):
     """Emulator cog
@@ -143,10 +144,8 @@ class Emulator(commands.Cog):
                     for item in items: 
                         info_msg += f"\t|__ {item} \n"
         info_msg += "```" 
-        # Translate it
-        info_msg = _(info_msg)
 
-        await self._embed_msg(ctx, title=_("Available ROMs"), description=info_msg)
+        await self._embed_msg(ctx, title=_("Available ROMs"), description=_(info_msg))
 
 
     @game.command(name="definitions", aliases=["defs"])
@@ -161,9 +160,7 @@ class Emulator(commands.Cog):
                 info_msg += f"\t|__Boot ROM: {definition[1]}\n"
                 info_msg += f"\t|__Game ROM: {definition[2]}\n"
         info_msg += "```" 
-        # Translate it
-        info_msg = _(info_msg)
-        await self._embed_msg(ctx, title=_("Defined Games"), description=info_msg)
+        await self._embed_msg(ctx, title=_("Defined Games"), description=_(info_msg))
 
 
     @game.command(name="set")
@@ -281,7 +278,7 @@ class Emulator(commands.Cog):
         return os.path.join(await self.gb_path(), "saves")
 
 
-    async def save_definition_dir(self, def_name):
+    async def saves_definition_dir(self, def_name):
         return os.path.join(await self.saves_dir(), def_name)
 
 
@@ -368,6 +365,37 @@ class Emulator(commands.Cog):
                 title=_("Setting Changed"),
                 description=_(f"The ROMs path location has been set to {local_path}")
             )
+
+
+    @commands.group()
+    @checks.is_owner()
+    async def saves(self, ctx: commands.Context):
+        """Saves commands"""
+
+
+    @saves.command(name="list")
+    async def saves_list(self, ctx: commands.Context, definition_name:str=None):
+        info_msg = "```\ngb\n"
+        for def_name, bootROM, gameROM in await self._conf.gamedefs():
+            if definition_name is not None:
+                if def_name != definition_name:
+                    continue
+
+            info_msg += f"|__ {def_name} \n"
+            for name, path in [("auto", await self.auto_save_dir(def_name)), ("named", await self.named_save_dir(def_name))]:
+                info_msg += f"\t|__ {name} \n"
+                if not os.path.exists(path):
+                    info_msg += f"\t\t|__ <NOTHING> \n"
+                else:
+                    items = list(os.listdir(path))
+                    if len(items) == 0:
+                        info_msg += f"\t\t|__ <NOTHING> \n"
+                    else:
+                        for item in items: 
+                            info_msg += f"\t\t|__ {item} \n"
+        info_msg += "```" 
+
+        await self._embed_msg(ctx, title=_("Save Files"), description=_(info_msg))
 
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs):
