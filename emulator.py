@@ -109,10 +109,12 @@ class Emulator(commands.Cog):
                             # Press button X times
                             for n in range(num):
                                 self._instances[def_name].pressButton(button)
+                            self._instances[def_name].runForXSeconds(10)
                             await self._send_screenshot(def_name)
                         elif action == 'h':
                             # Hold button for X seconds
                             self._instances[def_name].holdButton(button, num)
+                            self._instances[def_name].runForXSeconds(10)
                             await self._send_screenshot(def_name)
 
 
