@@ -239,7 +239,7 @@ class Emulator(commands.Cog):
         self._instances[definition_name].makeGIF(screenshot_path)
         await self.send_message_to_registered_channels(
                 definition_name, description=f"Started \"{definition_name}\"",
-                file=discord.File(screenshot_path))
+                file=discord.File(screenshot_path, filename="gameplay.gif"))
 
 
     @setup.command(name="ROMs", aliases=["roms"])
