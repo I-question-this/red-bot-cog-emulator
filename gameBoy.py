@@ -153,24 +153,26 @@ class GameBoy(AbastractEmulator):
 
 
   # State Management
-  def loadState(self, saveStateFilePath:str) -> None:
+  def loadState(self, state_file_path:str) -> None:
       """Load a save state file.
 
       Parameters:
-      saveStateFilePath: str
+      state_file_path: str
         File path to the state file to load.
       """
-      self._pyboy.loadState(saveStateFilePath)
+      with open(state_file_path, "rb") as fin:
+          self._pyboy.load_state(fin)
 
 
-  def saveState(self, saveStateFilePath:str) -> None:
+  def saveState(self, state_file_path:str) -> None:
       """Save a save state file.
 
       Parameters:
-      saveStateFilePath: str
+      state_file_path: str
         File path to the state file to save.
       """
-      self._pyboy.saveState(saveStateFilePath)
+      with open(state_file_path, "wb") as fout:
+          self._pyboy.save_state(fout)
 
   # Status
   @property

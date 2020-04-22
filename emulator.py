@@ -110,14 +110,17 @@ class Emulator(commands.Cog):
                             for n in range(num):
                                 self._instances[def_name].pressButton(button)
                             self._instances[def_name].runForXSeconds(10)
+                            await self._save_main_state_file(def_name)
                             await self._send_screenshot(def_name,
                                     title=_(f"{author.display_name} pressed \"{button}\" {num} time(s)"))
                         elif action == 'h':
                             # Hold button for X seconds
                             self._instances[def_name].holdButton(button, num)
                             self._instances[def_name].runForXSeconds(10)
+                            await self._save_main_state_file(def_name)
                             await self._send_screenshot(def_name,
                                     title=_(f"{author.display_name} held \"{button}\" for {num} second(s)"))
+
 
     # Commands
     @commands.group()
@@ -222,14 +225,15 @@ class Emulator(commands.Cog):
                     description=_(info_msg), error=True)
 
         # Stop the instance
-        self._instances[definition_name].stop()
-        del self._instances[definition_name]
-        del self._locks[definition_name]
-        info_msg = "```\n"
-        info_msg += f"{definition_name} has been stopped.\n"
-        info_msg += "```\n"
-        return await self._embed_msg(ctx, title=_("Instance Stopped"),
-                description=_(info_msg), success=True)
+        # Lock it up, just in case someone jumps the gun.
+        async with self._locks[definition_name]:
+            await self._save_main_state_file(definition_name)
+            self._instances[definition_name].stop()
+            info_msg = "```\n"
+            info_msg += f"{definition_name} has been stopped.\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Instance Stopped"),
+                    description=_(info_msg), success=True)
 
 
     @setup.command(name="start")
@@ -265,25 +269,29 @@ class Emulator(commands.Cog):
         if not os.path.exists(await self.saves_definition_dir(definition_name)):
             os.mkdir(await self.saves_definition_dir(definition_name))
 
-        if not os.path.exists(await self.auto_save_dir(definition_name)):
-            os.mkdir(await self.auto_save_dir(definition_name))
-
-        if not os.path.exists(await self.named_save_dir(definition_name)):
-            os.mkdir(await self.named_save_dir(definition_name))
+        if not os.path.exists(await self.state_save_dir(definition_name)):
+            os.mkdir(await self.state_save_dir(definition_name))
 
         if not os.path.exists(await self.screen_shots_save_dir(definition_name)):
             os.mkdir(await self.screen_shots_save_dir(definition_name))
 
-        # Time to start
-        self._instances[definition_name].start(
-                gameROMPath=await self.gameROM_path(def_info[2]),
-                bootROMPath=await self.bootROM_path(def_info[1])
-            )
+        # Lock it up, just in case someone jumps the gun.
         self._locks[definition_name] = asyncio.Lock()
+        async with self._locks[definition_name]:
+            # Start the emulator, but don't run it
+            self._instances[definition_name].start(
+                    gameROMPath=await self.gameROM_path(def_info[2]),
+                    bootROMPath=await self.bootROM_path(def_info[1]),
+                    numberOfSecondsToRun=0
+                )
+            # Load the state file, if it exists
+            await self._load_main_state_file(definition_name)
+            # Now run the emulator 
+            self._instances[definition_name].runForXSeconds(60)
 
-        # Send a screenshot
-        await self._send_screenshot(definition_name, title=_(f"Started \"{definition_name}\""),
-                description=_(self._button_usage_message(definition_name)))
+            # Send a screenshot
+            await self._send_screenshot(definition_name, title=_(f"Started \"{definition_name}\""),
+                    description=_(self._button_usage_message(definition_name)))
 
 
     @setup.command(name="ROMs", aliases=["roms"])
@@ -519,7 +527,7 @@ class Emulator(commands.Cog):
                     continue
 
             info_msg += f"|__ {def_name} \n"
-            for name, path in [("auto", await self.auto_save_dir(def_name)), ("named", await self.named_save_dir(def_name))]:
+            for name, path in [("state", await self.state_save_dir(def_name))]:
                 info_msg += f"\t|__ {name} \n"
                 if not os.path.exists(path):
                     info_msg += f"\t\t|__ <NOTHING> \n"
@@ -717,80 +725,42 @@ class Emulator(commands.Cog):
         return os.path.join(await self.saves_dir(), def_name)
 
 
-    async def auto_save_dir(self, def_name) -> str:
-        """Return '<local_path>/gb/saves/<def_name>/auto'
+    async def state_save_dir(self, def_name) -> str:
+        """Return '<local_path>/gb/saves/<def_name>/states'
 
         Note this function does not check if this path exists.
 
         Parameters
         ----------
         def_name: str
-            The auto save directory for the given game definition name.
+            The definition name to get the state save directory of.
 
         Returns
         -------
         str
-            '<local_path>/gb/saves/<def_name>/auto'
+            '<local_path>/gb/saves/<def_name>/states'
         """
-        return os.path.join(await self.saves_definition_dir(def_name), "auto")
+        return os.path.join(await self.saves_definition_dir(def_name), "states")
 
 
-    async def auto_save_path(self, def_name, save_name) -> str:
-        """Return '<local_path>/gb/saves/<def_name>/auto/<save_name>'
+    async def state_save_path(self, def_name, save_name) -> str:
+        """Return '<local_path>/gb/saves/<def_name>/states/<save_name>'
 
         Note this function does not check if this path exists.
 
         Parameters
         ----------
         def_name: str
-            The named save directory for the given game definition name.
+            The definition name to get the state save file of.
         save_name: str
-            The save file name.
+            The state save file name.
 
         Returns
         -------
         str
-            '<local_path>/gb/saves/<def_name>/auto/<save_name>'
+            '<local_path>/gb/saves/<def_name>/states/<save_name>'
         """
-        return os.path.join(await self.auto_save_dir(def_name), save_name)
-
-
-    async def named_save_dir(self, def_name) -> str:
-        """Return '<local_path>/gb/saves/<def_name>/named'
-
-        Note this function does not check if this path exists.
-
-        Parameters
-        ----------
-        def_name: str
-            The named save directory for the given game definition name.
-
-        Returns
-        -------
-        str
-            '<local_path>/gb/saves/<def_name>/named'
-        """
-        return os.path.join(await self.saves_definition_dir(def_name), "named")
-
-
-    async def named_save_path(self, def_name, save_name) -> str:
-        """Return '<local_path>/gb/saves/<def_name>/named/<save_name>'
-
-        Note this function does not check if this path exists.
-
-        Parameters
-        ----------
-        def_name: str
-            The named save directory for the given game definition name.
-        save_name: str
-            The save file name.
-
-        Returns
-        -------
-        str
-            '<local_path>/gb/saves/<def_name>/named/<save_name>'
-        """
-        return os.path.join(await self.named_save_dir(def_name), save_name)
+        return os.path.join(await self.state_save_dir(def_name), save_name)
 
 
     async def screen_shots_save_dir(self, def_name) -> str:
@@ -851,7 +821,37 @@ class Emulator(commands.Cog):
             else:
                 file = None
             await self._embed_msg(channel, file=file, **kwargs)
-    
+
+
+    async def _save_main_state_file(self, definition_name: str) -> None:
+        """Save the current state to the main state save file.
+
+        Parameters
+        ----------
+        definition_name: str
+            The name of the game being played by channels.
+            Note that this function does not check if it exists, so it will crash
+            if there is no existing instance.
+        """
+        self._instances[definition_name].saveState(await self.state_save_path(definition_name, "main"))
+
+
+    async def _load_main_state_file(self, definition_name: str) -> None:
+        """Load the main state file.
+
+        If the main state file does not exist it will simply not load anything.
+
+
+        Parameters
+        ----------
+        definition_name: str
+            The name of the game being played by channels.
+            Note that this function does not check if it exists, so it will crash
+            if there is no existing instance.
+        """
+        if os.path.exists(await self.state_save_path(definition_name, "main")):
+            self._instances[definition_name].loadState(await self.state_save_path(definition_name, "main"))
+
 
     async def _send_screenshot(self, definition_name: str,  **kwargs) -> None:
         """Send a message and screen shot to every registered channel to the given definition name
