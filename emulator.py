@@ -79,7 +79,7 @@ class Emulator(commands.Cog):
                     return
                 else:
                     # Is there an instance?
-                    if self._instances[def_name] is None:
+                    if self._instances.get(def_name, None) is None:
                         return
                     # Is the first word actually one of the buttons?
                     if split_mess[0] not in self._instances[def_name].buttonNames:
@@ -110,13 +110,14 @@ class Emulator(commands.Cog):
                             for n in range(num):
                                 self._instances[def_name].pressButton(button)
                             self._instances[def_name].runForXSeconds(10)
-                            await self._send_screenshot(def_name)
+                            await self._send_screenshot(def_name,
+                                    title=_(f"{author.display_name} pressed \"{button}\" {num} time(s)"))
                         elif action == 'h':
                             # Hold button for X seconds
                             self._instances[def_name].holdButton(button, num)
                             self._instances[def_name].runForXSeconds(10)
-                            await self._send_screenshot(def_name)
-
+                            await self._send_screenshot(def_name,
+                                    title=_(f"{author.display_name} held \"{button}\" for {num} second(s)"))
 
     # Commands
     @commands.group()
@@ -884,7 +885,7 @@ class Emulator(commands.Cog):
             Help message.
         """
         msg = "```\n"
-        msg += "Usage\n"
+        msg += "Usage:\n"
         msg += "<button> := press <button> once\n"
         msg += "<button> p <number> := press <button> <number> times (max: 3)\n"
         msg += "<button> h <number> := hold <button> for <number> seconds (max: 3)\n"
