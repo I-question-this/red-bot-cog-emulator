@@ -280,8 +280,9 @@ class Emulator(commands.Cog):
             )
         self._locks[definition_name] = asyncio.Lock()
 
-        # Save a screenshot
-        await self._send_screenshot(definition_name)
+        # Send a screenshot
+        await self._send_screenshot(definition_name, title=_(f"Started \"{definition_name}\""),
+                description=_(self._button_usage_message(definition_name)))
 
 
     @setup.command(name="ROMs", aliases=["roms"])
@@ -851,12 +852,45 @@ class Emulator(commands.Cog):
             await self._embed_msg(channel, file=file, **kwargs)
     
 
-    async def _send_screenshot(self, definition_name: str) -> None:
+    async def _send_screenshot(self, definition_name: str,  **kwargs) -> None:
+        """Send a message and screen shot to every registered channel to the given definition name
+
+        Parameters
+        ----------
+        definition_name: str
+            The name of the game being played by channels.
+            Note that this function does not check if it exists, so it will crash
+            if there is no existing instance.
+        """
         screenshot_path = await self.screen_shots_save_path(definition_name, f"{datetime.now()}.gif")
         self._instances[definition_name].makeGIF(screenshot_path)
         await self.send_message_to_registered_channels(
-                definition_name, description=f"Started \"{definition_name}\"",
-                filepath=screenshot_path, filename="gameplay.gif")
+                definition_name, filepath=screenshot_path, filename="gameplay.gif", **kwargs)
+
+
+    def _button_usage_message(self, definition_name:str) -> str:
+        """Construct a help message to interacting with the emulator of the given definition name.
+
+        Parameters
+        ----------
+        definition_name: str
+            The name of the game being played by channels.
+            Note that this function does not check if it exists, so it will crash
+            if there is no existing instance.
+        
+        Returns
+        -------
+        str
+            Help message.
+        """
+        msg = "```\n"
+        msg += "Usage\n"
+        msg += "<button> := press <button> once\n"
+        msg += "<button> p <number> := press <button> <number> times (max: 3)\n"
+        msg += "<button> h <number> := hold <button> for <number> seconds (max: 3)\n"
+        msg += f"Buttons: ({', '.join(sorted(self._instances[definition_name].buttonNames))})\n"
+        msg += "```\n"
+        return msg
 
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs) -> None:
