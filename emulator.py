@@ -4,6 +4,7 @@ Redbot Cog for Interfacing with Emulators
 :copyright: (c) 2020 Tyler Westland
 :license: GPL-3.0, see LICENSE for more details.
 """
+import asyncio
 from datetime import datetime
 import discord
 from discord.embeds import EmptyEmbed
@@ -49,6 +50,7 @@ class Emulator(commands.Cog):
         self._conf = Config.get_conf(None, 1919191991919191, cog_name=f"{self.__class__.__name__}", force_registration=True)
         self._conf.register_global(**_DEFAULT_GLOBAL)
         self._instances = {}
+        self._locks = {}
 
 
     # Getting input
@@ -67,11 +69,51 @@ class Emulator(commands.Cog):
         if await self.bot.is_automod_immune(message):
             return
 
+
         registerd_channels = await self._conf.registerd_channels()
         for channel_id, def_name in registerd_channels:
             if message.channel.id == channel_id:
-                return await self._embed_msg(message.channel, title=_("TEST"),
-                        description=_("TEST"), success=True)
+                # They're talking to a specific instance, but is it important?
+                split_mess = message.content.split(" ")
+                if len(split_mess) > 3:
+                    return
+                else:
+                    # Is there an instance?
+                    if self._instances[def_name] is None:
+                        return
+                    # Is the first word actually one of the buttons?
+                    if split_mess[0] not in self._instances[def_name].buttonNames:
+                        return
+                    else:
+                        button = split_mess[0]
+                        if len(split_mess) == 3:
+                            if split_mess[1] == 'p' or split_mess[1] == 'h':
+                                action = split_mess[1]
+                                try:
+                                    num = abs(int(split_mess[2]))
+                                    if num == 0:
+                                        num = 1
+                                except ValueError:
+                                    num = 1
+                            else:
+                                action = 'p'
+                                num = 1
+                        else:
+                            action = 'p'
+                            num = 1
+
+                if not self._locks[def_name].locked():
+                    # Only one may press the button.
+                    async with self._locks[def_name]:
+                        if action == 'p':
+                            # Press button X times
+                            for n in range(num):
+                                self._instances[def_name].pressButton(button)
+                            await self._send_screenshot(def_name)
+                        elif action == 'h':
+                            # Hold button for X seconds
+                            self._instances[def_name].holdButton(button, num)
+                            await self._send_screenshot(def_name)
 
 
     # Commands
@@ -178,6 +220,7 @@ class Emulator(commands.Cog):
         # Stop the instance
         self._instances[definition_name].stop()
         del self._instances[definition_name]
+        del self._locks[definition_name]
         info_msg = "```\n"
         info_msg += f"{definition_name} has been stopped.\n"
         info_msg += "```\n"
@@ -232,13 +275,10 @@ class Emulator(commands.Cog):
                 gameROMPath=await self.gameROM_path(def_info[2]),
                 bootROMPath=await self.bootROM_path(def_info[1])
             )
+        self._locks[definition_name] = asyncio.Lock()
 
         # Save a screenshot
-        screenshot_path = await self.screen_shots_save_path(definition_name, f"{datetime.now()}.gif")
-        self._instances[definition_name].makeGIF(screenshot_path)
-        await self.send_message_to_registered_channels(
-                definition_name, description=f"Started \"{definition_name}\"",
-                file=discord.File(screenshot_path, filename="gameplay.gif"))
+        await self._send_screenshot(definition_name)
 
 
     @setup.command(name="ROMs", aliases=["roms"])
@@ -798,8 +838,22 @@ class Emulator(commands.Cog):
             it is intended to be used by other functions that do check if the 
             given definition_name exists.
         """
+        filepath = kwargs.get("filepath")
+        filename = kwargs.get("filename")
         async for channel in self.filtered_registered_channels(definition_name):
-            await self._embed_msg(channel, **kwargs)
+            if filepath:
+                file = discord.File(filepath, filename=filename)
+            else:
+                file = None
+            await self._embed_msg(channel, file=file, **kwargs)
+    
+
+    async def _send_screenshot(self, definition_name: str) -> None:
+        screenshot_path = await self.screen_shots_save_path(definition_name, f"{datetime.now()}.gif")
+        self._instances[definition_name].makeGIF(screenshot_path)
+        await self.send_message_to_registered_channels(
+                definition_name, description=f"Started \"{definition_name}\"",
+                filepath=screenshot_path, filename="gameplay.gif")
 
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs) -> None:

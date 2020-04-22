@@ -25,9 +25,9 @@ class GameBoy(AbastractEmulator):
     numberOfSeconds: float
         Number of seconds to hold this button.
     """
-    self._pyboy.sendInput(button.pressCode)
+    self._pyboy.send_input(button.pressCode)
     self.runForXSeconds(numberOfSeconds)
-    self._pyboy.sendInput(button.releaseCode)
+    self._pyboy.send_input(button.releaseCode)
     self.runForXSeconds(1)
 
 
@@ -39,9 +39,9 @@ class GameBoy(AbastractEmulator):
     button: ButtonCode
         Button to be pressed.
     """
-    self._pyboy.sendInput(button.pressCode)
+    self._pyboy.send_input(button.pressCode)
     self.runForXFrames(2)
-    self._pyboy.sendInput(button.releaseCode)
+    self._pyboy.send_input(button.releaseCode)
     self.runForXSeconds(1)
     
 
