@@ -81,12 +81,15 @@ class Emulator(commands.Cog):
                     # Is there an instance?
                     if self._instances.get(def_name, None) is None:
                         return
+                    # Get rid of any capitalizations.
+                    split_mess[0] = split_mess[0].lower()
                     # Is the first word actually one of the buttons?
                     if split_mess[0] not in self._instances[def_name].buttonNames:
                         return
                     else:
                         button = split_mess[0]
                         if len(split_mess) == 3:
+                            split_mess[1] = split_mess[1].lower()
                             if split_mess[1] == 'p' or split_mess[1] == 'h':
                                 action = split_mess[1]
                                 try:
