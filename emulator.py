@@ -72,7 +72,7 @@ class Emulator(commands.Cog):
         for channel_id, def_name in registerd_channels:
             if message.channel.id == channel_id:
                 return await self._embed_msg(message.channel, title=_("TEST"),
-                        description=_("TEST"))
+                        description=_("TEST"), success=True)
 
 
     # Commands
@@ -96,7 +96,7 @@ class Emulator(commands.Cog):
             info_msg += f"{definition_name} does not exist\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
-                    description=_(info_msg))
+                    description=_(info_msg), error=True)
 
         registerd_channels = await self._conf.registerd_channels()
         for channel_id, def_name in registerd_channels:
@@ -105,7 +105,7 @@ class Emulator(commands.Cog):
                 info_msg += f"This channel is already registered to \"{def_name}\"\n"
                 info_msg += "```\n"
                 return await self._embed_msg(ctx, title=_("Channel Already Register"),
-                        description=_(info_msg))
+                        description=_(info_msg), error=True)
 
         registerd_channels.append([ctx.channel.id, definition_name])
         await self._conf.registerd_channels.set(registerd_channels)
@@ -113,7 +113,7 @@ class Emulator(commands.Cog):
         info_msg += f"Registered this channel to \"{definition_name}\"\n"
         info_msg += "```\n"
         return await self._embed_msg(ctx, title=_("Channel Registered"),
-                description=_(info_msg))
+                description=_(info_msg), success=True)
 
 
     @guild.command(name="unregister")
@@ -128,13 +128,13 @@ class Emulator(commands.Cog):
                 await self._conf.registerd_channels.set(
                         list(filter(lambda rc: rc[0] != ctx.channel.id, registerd_channels)))
                 return await self._embed_msg(ctx, title=_("Channel Unregistered"),
-                        description=_(info_msg))
+                        description=_(info_msg), success=True)
 
         info_msg = "```\n"
         info_msg += f"This channel isn't registered to anything\n"
         info_msg += "```\n"
         return await self._embed_msg(ctx, title=_("Channel Not Registered"),
-                description=_(info_msg))
+                description=_(info_msg), error=True)
 
 
     @commands.group()
@@ -158,7 +158,7 @@ class Emulator(commands.Cog):
             info_msg += f"{definition_name} does not exist\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
-                    description=_(info_msg))
+                    description=_(info_msg), error=True)
 
         # Does an instance acutally exist?
         if self._instances.get(definition_name, None) is None:
@@ -166,7 +166,7 @@ class Emulator(commands.Cog):
             info_msg += f"{definition_name} has no instance running\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Instance Not Running"),
-                    description=_(info_msg))
+                    description=_(info_msg), error=True)
         
         # Is the instance actually running?
         if not self._instances[definition_name].isRunning:
@@ -174,7 +174,7 @@ class Emulator(commands.Cog):
             info_msg += f"{definition_name} has no instance running\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Instance Not Running"),
-                    description=_(info_msg))
+                    description=_(info_msg), error=True)
 
         # Stop the instance
         self._instances[definition_name].stop()
@@ -183,7 +183,7 @@ class Emulator(commands.Cog):
         info_msg += f"{definition_name} has been stopped.\n"
         info_msg += "```\n"
         return await self._embed_msg(ctx, title=_("Instance Stopped"),
-                description=_(info_msg))
+                description=_(info_msg), success=True)
 
 
     @setup.command(name="start")
@@ -201,7 +201,7 @@ class Emulator(commands.Cog):
             info_msg += f"{definition_name} does not exist\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
-                    description=_(info_msg))
+                    description=_(info_msg), error=True)
 
         # Does an instance already exist?
         if self._instances.get(definition_name, None) is None:
@@ -213,7 +213,7 @@ class Emulator(commands.Cog):
             info_msg += f"{definition_name} already has an instance running\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Instance is Already Running"),
-                    description=_(info_msg))
+                    description=_(info_msg), error=True)
 
         # Perhaps the first time
         if not os.path.exists(await self.saves_definition_dir(definition_name)):
@@ -259,7 +259,7 @@ class Emulator(commands.Cog):
                         info_msg += f"\t|__ {item} \n"
         info_msg += "```" 
 
-        await self._embed_msg(ctx, title=_("Available ROMs"), description=_(info_msg))
+        await self._embed_msg(ctx, title=_("Available ROMs"), description=_(info_msg), success=True)
 
 
     @setup.command(name="definitions", aliases=["defs"])
@@ -274,7 +274,7 @@ class Emulator(commands.Cog):
                 info_msg += f"\t|__Boot ROM: {definition[1]}\n"
                 info_msg += f"\t|__Game ROM: {definition[2]}\n"
         info_msg += "```" 
-        await self._embed_msg(ctx, title=_("Defined Games"), description=_(info_msg))
+        await self._embed_msg(ctx, title=_("Defined Games"), description=_(info_msg), success=True)
 
 
     @setup.command(name="set")
@@ -295,14 +295,16 @@ class Emulator(commands.Cog):
             return await self._embed_msg(
                 ctx,
                 title=_("Invalid Boot ROM"),
-                description=_(f"{bootROM} does not exist.")
+                description=_(f"{bootROM} does not exist."),
+                error=True
             )
 
         if not os.path.exists(await self.gameROM_path(gameROM)):
             return await self._embed_msg(
                 ctx,
                 title=_("Invalid Game ROM"),
-                description=_(f"{gameROM} does not exist.")
+                description=_(f"{gameROM} does not exist."),
+                error=True
             )
 
         # Check that this name has not already been used
@@ -312,7 +314,8 @@ class Emulator(commands.Cog):
                 return await self._embed_msg(
                     ctx,
                     title=_("Name Conflict"),
-                    description=_(f"{name} already exist as a name.")
+                    description=_(f"{name} already exist as a name."),
+                    error=True
                 )
         # Set the definition
         game_defs.append((name, bootROM, gameROM))
@@ -320,7 +323,8 @@ class Emulator(commands.Cog):
         return await self._embed_msg(
             ctx,
             title=_("Saved Definition"),
-            description=_(f"Definition was saved successfully.")
+            description=_(f"Definition was saved successfully."),
+            success=True
         )
 
 
@@ -357,13 +361,15 @@ class Emulator(commands.Cog):
                 return await self._embed_msg(
                     ctx,
                     title=_("Deletion Successful"),
-                    description=_(f"{definition_name} has been deleted.")
+                    description=_(f"{definition_name} has been deleted."),
+                    success=True
                 )
 
         return await self._embed_msg(
             ctx,
             title=_("No Such Definition"),
-            description=_(f"{name} does not exist.")
+            description=_(f"{name} does not exist."),
+            error=True
         )
 
 
@@ -387,7 +393,8 @@ class Emulator(commands.Cog):
             return await self._embed_msg(
                 ctx,
                 title=_("Setting Changed"),
-                description=_(f"The localtracks path location has been reset to {cog_data_path(raw_name='Emulator').absolute()}")
+                description=_(f"The localpath location has been reset to {cog_data_path(raw_name='Emulator').absolute()}"),
+                success=True
             )
 
         info_msg = _(
@@ -420,7 +427,8 @@ class Emulator(commands.Cog):
             return await self._embed_msg(
                 ctx,
                 title=_("Invalid Path"),
-                description=_(f"{local_path} does not seem like a valid path.")
+                description=_(f"{local_path} does not seem like a valid path."),
+                error=True
             )
         # It exists, so we set it.
         await self._conf.local_path.set(local_path)
@@ -432,7 +440,7 @@ class Emulator(commands.Cog):
                     "create a gb folder in `{localfolder}` before attempting "
                     "to play games."
                 )
-            await self._embed_msg(ctx, title=_("Invalid Environment"), description=warn_msg)
+            await self._embed_msg(ctx, title=_("Invalid Environment"), description=warn_msg, error=True)
         else:
             for subfolder in [await self.boots_dir(), await self.games_dir(), await self.saves_dir()]:
                 if not os.path.exists(subfolder):
@@ -441,7 +449,8 @@ class Emulator(commands.Cog):
         return await self._embed_msg(
                 ctx,
                 title=_("Setting Changed"),
-                description=_(f"The ROMs path location has been set to {local_path}")
+                description=_(f"The ROMs path location has been set to {local_path}"),
+                success=True
             )
 
 
@@ -481,7 +490,7 @@ class Emulator(commands.Cog):
                             info_msg += f"\t\t|__ {item} \n"
         info_msg += "```" 
 
-        await self._embed_msg(ctx, title=_("Save Files"), description=_(info_msg))
+        await self._embed_msg(ctx, title=_("Save Files"), description=_(info_msg), success=True)
 
 
     # Helper Functions
