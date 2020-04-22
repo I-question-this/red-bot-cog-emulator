@@ -90,8 +90,8 @@ class Emulator(commands.Cog):
                             if split_mess[1] == 'p' or split_mess[1] == 'h':
                                 action = split_mess[1]
                                 try:
-                                    num = abs(int(split_mess[2]))
-                                    if num == 0:
+                                    num = min(3, int(split_mess[2]))
+                                    if num <= 0:
                                         num = 1
                                 except ValueError:
                                     num = 1
