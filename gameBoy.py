@@ -148,7 +148,7 @@ class GameBoy(AbastractEmulator):
   # Stopping
   def _abstractStop(self) -> None:
     """Stop the PyBoy emulator"""
-    self._pyboy.stop(save=True)
+    self._pyboy.stop(save=False)
     self._pyboy = None
 
 
