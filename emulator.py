@@ -43,7 +43,6 @@ class Emulator(commands.Cog):
     """Emulator cog
     Allows users to play emulators together.
     """
-
     def __init__(self, bot: Red):
         super().__init__()
         self.bot = bot
@@ -371,8 +370,6 @@ class Emulator(commands.Cog):
             description=_(f"{name} does not exist."),
             error=True
         )
-
-
 
 
     @setup.command(name="localpath")
