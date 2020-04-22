@@ -120,6 +120,7 @@ class Emulator(commands.Cog):
 
     # Commands
     @commands.group()
+    @checks.is_owner()
     @commands.guild_only()
     async def guild(self, ctx: commands.Context) -> None:
         """Guild commands"""
