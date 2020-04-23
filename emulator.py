@@ -128,13 +128,13 @@ class Emulator(commands.Cog):
     # Commands
     @commands.group()
     @checks.is_owner()
+    async def setup(self, ctx: commands.Context) -> None:
+        """Setup commands"""
+
+
     @commands.guild_only()
-    async def guild(self, ctx: commands.Context) -> None:
-        """Guild commands"""
-
-
-    @guild.command(name="register")
-    async def guild_register(self, ctx: commands.Context, definition_name:str) -> None:
+    @setup.command(name="register")
+    async def setup_register(self, ctx: commands.Context, definition_name:str) -> None:
         """Register the channel this message was sent from to the given game.
 
         Parameters
@@ -167,8 +167,9 @@ class Emulator(commands.Cog):
                 description=_(info_msg), success=True)
 
 
-    @guild.command(name="unregister")
-    async def guild_unregister(self, ctx: commands.Context):
+    @commands.guild_only()
+    @setup.command(name="unregister")
+    async def setup_unregister(self, ctx: commands.Context):
         """Unregiseter the channel this message is sent from."""
         registerd_channels = await self._conf.registerd_channels()
         for channel_id, def_name in registerd_channels:
@@ -186,12 +187,6 @@ class Emulator(commands.Cog):
         info_msg += "```\n"
         return await self._embed_msg(ctx, title=_("Channel Not Registered"),
                 description=_(info_msg), error=True)
-
-
-    @commands.group()
-    @checks.is_owner()
-    async def setup(self, ctx: commands.Context) -> None:
-        """Setup commands"""
 
 
     @setup.command(name="stop")
