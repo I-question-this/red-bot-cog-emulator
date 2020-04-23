@@ -230,8 +230,8 @@ class Emulator(commands.Cog):
             info_msg = "```\n"
             info_msg += f"{definition_name} has been stopped.\n"
             info_msg += "```\n"
-            return await self._embed_msg(ctx, title=_("Instance Stopped"),
-                    description=_(info_msg), success=True)
+            return await self.send_message_to_registered_channels(definition_name, 
+                    title=_("Instance Stopped"), description=_(info_msg), success=True)
 
 
     @setup.command(name="start")
