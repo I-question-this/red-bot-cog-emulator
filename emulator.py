@@ -502,44 +502,6 @@ class Emulator(commands.Cog):
             )
 
 
-    @commands.group()
-    @checks.is_owner()
-    async def saves(self, ctx: commands.Context) -> None:
-        """Saves commands"""
-
-
-    @saves.command(name="list")
-    async def saves_list(self, ctx: commands.Context, definition_name:str=None) -> None:
-        """Display the list of save files.
-
-        Parameters
-        ----------
-        definition_name: str
-            If set it will only show the save files for the given name.
-            If not set it will show all save files.
-        """
-        info_msg = "```\ngb\n"
-        for def_name, bootROM, gameROM in await self._conf.game_defs():
-            if definition_name is not None:
-                if def_name != definition_name:
-                    continue
-
-            info_msg += f"|__ {def_name} \n"
-            for name, path in [("state", await self.state_save_dir(def_name))]:
-                info_msg += f"\t|__ {name} \n"
-                if not os.path.exists(path):
-                    info_msg += f"\t\t|__ <NOTHING> \n"
-                else:
-                    items = list(os.listdir(path))
-                    if len(items) == 0:
-                        info_msg += f"\t\t|__ <NOTHING> \n"
-                    else:
-                        for item in items: 
-                            info_msg += f"\t\t|__ {item} \n"
-        info_msg += "```" 
-
-        await self._embed_msg(ctx, title=_("Save Files"), description=_(info_msg), success=True)
-
 
     # Helper Functions
     async def definition_name_information(self, definition_name: str) -> List[str]:
