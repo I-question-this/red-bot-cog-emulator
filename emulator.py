@@ -222,16 +222,7 @@ class Emulator(commands.Cog):
             return await self._embed_msg(ctx, title=_("Instance Not Running"),
                     description=_(info_msg), error=True)
 
-        # Stop the instance
-        # Lock it up, just in case someone jumps the gun.
-        async with self._locks[definition_name]:
-            await self._save_main_state_file(definition_name)
-            self._instances[definition_name].stop()
-            info_msg = "```\n"
-            info_msg += f"{definition_name} has been stopped.\n"
-            info_msg += "```\n"
-            return await self._send_message_to_registered_channels(definition_name, 
-                    title=_("Instance Stopped"), description=_(info_msg), success=True)
+        await self._stop_instance(definition_name)
 
 
     @setup.command(name="start")
@@ -273,23 +264,7 @@ class Emulator(commands.Cog):
         if not os.path.exists(await self.screen_shots_save_dir(definition_name)):
             os.mkdir(await self.screen_shots_save_dir(definition_name))
 
-        # Lock it up, just in case someone jumps the gun.
-        self._locks[definition_name] = asyncio.Lock()
-        async with self._locks[definition_name]:
-            # Start the emulator, but don't run it
-            self._instances[definition_name].start(
-                    gameROMPath=await self.gameROM_path(def_info[2]),
-                    bootROMPath=await self.bootROM_path(def_info[1]),
-                    numberOfSecondsToRun=0
-                )
-            # Load the state file, if it exists
-            await self._load_main_state_file(definition_name)
-            # Now run the emulator 
-            self._instances[definition_name].runForXSeconds(60)
-
-            # Send a screenshot
-            await self._send_screenshot(definition_name, title=_(f"Started \"{definition_name}\""),
-                    description=_(self._button_usage_message(definition_name)))
+        await self._start_instance(def_info)
 
 
     @setup.command(name="ROMs", aliases=["roms"])
@@ -852,6 +827,53 @@ class Emulator(commands.Cog):
         msg += f"Buttons: ({', '.join(sorted(self._instances[definition_name].buttonNames))})\n"
         msg += "```\n"
         return msg
+
+
+    async def _start_instance(self, def_info:list):
+        """Start the given game.
+
+        Parameters
+        ----------
+        def_info: list
+            List of the definition name, bootROM, and gameROM.
+        """
+        # Lock it up, just in case someone jumps the gun.
+        self._locks[def_info[0]] = asyncio.Lock()
+        async with self._locks[def_info[0]]:
+            # Start the emulator, but don't run it
+            self._instances[def_info[0]].start(
+                    bootROMPath=await self.bootROM_path(def_info[1]),
+                    gameROMPath=await self.gameROM_path(def_info[2]),
+                    numberOfSecondsToRun=0
+                )
+            # Load the state file, if it exists
+            await self._load_main_state_file(def_info[0])
+            # Now run the emulator 
+            self._instances[def_info[0]].runForXSeconds(60)
+
+            # Send a screenshot
+            await self._send_screenshot(def_info[0], title=_(f"Started \"{def_info[0]}\""),
+                    description=_(self._button_usage_message(def_info[0])))
+
+
+    async def _stop_instance(self, definition_name:str):
+        """Stop the given game.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name of the game to stop.
+        """
+        # Stop the instance
+        # Lock it up, just in case someone jumps the gun.
+        async with self._locks[definition_name]:
+            await self._save_main_state_file(definition_name)
+            self._instances[definition_name].stop()
+            info_msg = "```\n"
+            info_msg += f"{definition_name} has been stopped.\n"
+            info_msg += "```\n"
+            return await self._send_message_to_registered_channels(definition_name, 
+                    title=_("Instance Stopped"), description=_(info_msg), success=True)
 
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs) -> None:
