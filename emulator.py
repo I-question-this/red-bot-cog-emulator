@@ -35,7 +35,8 @@ _DEFAULT_GLOBAL = {
     "local_path": None,
     "game_defs": [],
     "registerd_channels": [],
-    "auto_saves": []
+    "auto_saves": [],
+    "auto_loads": []
 }
 
 
@@ -51,6 +52,16 @@ class Emulator(commands.Cog):
         self._conf.register_global(**_DEFAULT_GLOBAL)
         self._instances = {}
         self._locks = {}
+
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self._auto_load_instances()
+
+
+    @commands.Cog.listener()
+    async def on_shutdown(self):
+        await self._stop_all_instances()
 
 
     # Getting input
@@ -225,6 +236,12 @@ class Emulator(commands.Cog):
         await self._stop_instance(definition_name)
 
 
+    @setup.command(name="stop_all")
+    async def setup_stop_all(self, ctx: commands.Context) -> None:
+        """Stop all running games."""
+        await self._stop_all_instances()
+
+
     @setup.command(name="start")
     async def setup_start(self, ctx: commands.Context, definition_name: str) -> None:
         """Start the given game.
@@ -242,29 +259,22 @@ class Emulator(commands.Cog):
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
                     description=_(info_msg), error=True)
 
-        # Does an instance already exist?
-        if self._instances.get(definition_name, None) is None:
-            self._instances[definition_name] = GameBoy()
-        
-        # Is one already running?
-        if self._instances[definition_name].isRunning:
-            info_msg = "```\n"
-            info_msg += f"{definition_name} already has an instance running\n"
-            info_msg += "```\n"
-            return await self._embed_msg(ctx, title=_("Instance is Already Running"),
-                    description=_(info_msg), error=True)
-
-        # Perhaps the first time
-        if not os.path.exists(await self.saves_definition_dir(definition_name)):
-            os.mkdir(await self.saves_definition_dir(definition_name))
-
-        if not os.path.exists(await self.state_save_dir(definition_name)):
-            os.mkdir(await self.state_save_dir(definition_name))
-
-        if not os.path.exists(await self.screen_shots_save_dir(definition_name)):
-            os.mkdir(await self.screen_shots_save_dir(definition_name))
+        # Is it already running?
+        if self._instances.get(definition_name, None) is not None:
+            if self._instances[definition_name].isRunning:
+                info_msg = "```\n"
+                info_msg += f"{definition_name} already has an instance running\n"
+                info_msg += "```\n"
+                return await self._embed_msg(ctx, title=_("Instance is Already Running"),
+                        description=_(info_msg), error=True)
 
         await self._start_instance(def_info)
+
+
+    @setup.command(name="start_auto")
+    async def setup_start_auto(self, ctx: commands.Context) -> None:
+        """Start all games specified as auto load"""
+        await self._auto_load_instances()
 
 
     @setup.command(name="ROMs", aliases=["roms"])
@@ -838,22 +848,39 @@ class Emulator(commands.Cog):
             List of the definition name, bootROM, and gameROM.
         """
         # Lock it up, just in case someone jumps the gun.
-        self._locks[def_info[0]] = asyncio.Lock()
+        if self._locks.get(def_info[0], None) is None:
+            self._locks[def_info[0]] = asyncio.Lock()
         async with self._locks[def_info[0]]:
-            # Start the emulator, but don't run it
-            self._instances[def_info[0]].start(
-                    bootROMPath=await self.bootROM_path(def_info[1]),
-                    gameROMPath=await self.gameROM_path(def_info[2]),
-                    numberOfSecondsToRun=0
-                )
-            # Load the state file, if it exists
-            await self._load_main_state_file(def_info[0])
-            # Now run the emulator 
-            self._instances[def_info[0]].runForXSeconds(60)
+            # Perhaps the first time so create the folders.
+            if not os.path.exists(await self.saves_definition_dir(def_info[0])):
+                os.mkdir(await self.saves_definition_dir(def_info[0]))
 
-            # Send a screenshot
-            await self._send_screenshot(def_info[0], title=_(f"Started \"{def_info[0]}\""),
-                    description=_(self._button_usage_message(def_info[0])))
+            if not os.path.exists(await self.state_save_dir(def_info[0])):
+                os.mkdir(await self.state_save_dir(def_info[0]))
+
+            if not os.path.exists(await self.screen_shots_save_dir(def_info[0])):
+                os.mkdir(await self.screen_shots_save_dir(def_info[0]))
+
+            # Does an instance already exist?
+            if self._instances.get(def_info[0], None) is None:
+                self._instances[def_info[0]] = GameBoy()
+
+            # Check that it's not already running.
+            if not self._instances[def_info[0]].isRunning:
+                # Start the emulator, but don't run it
+                self._instances[def_info[0]].start(
+                        bootROMPath=await self.bootROM_path(def_info[1]),
+                        gameROMPath=await self.gameROM_path(def_info[2]),
+                        numberOfSecondsToRun=0
+                    )
+                # Load the state file, if it exists
+                await self._load_main_state_file(def_info[0])
+                # Now run the emulator 
+                self._instances[def_info[0]].runForXSeconds(60)
+
+                # Send a screenshot
+                await self._send_screenshot(def_info[0], title=_(f"Started \"{def_info[0]}\""),
+                        description=_(self._button_usage_message(def_info[0])))
 
 
     async def _stop_instance(self, definition_name:str):
@@ -867,13 +894,28 @@ class Emulator(commands.Cog):
         # Stop the instance
         # Lock it up, just in case someone jumps the gun.
         async with self._locks[definition_name]:
-            await self._save_main_state_file(definition_name)
-            self._instances[definition_name].stop()
-            info_msg = "```\n"
-            info_msg += f"{definition_name} has been stopped.\n"
-            info_msg += "```\n"
-            return await self._send_message_to_registered_channels(definition_name, 
-                    title=_("Instance Stopped"), description=_(info_msg), success=True)
+            if self._instances[definition_name].isRunning:
+                await self._save_main_state_file(definition_name)
+                self._instances[definition_name].stop()
+                info_msg = "```\n"
+                info_msg += f"{definition_name} has been stopped.\n"
+                info_msg += "```\n"
+                return await self._send_message_to_registered_channels(definition_name, 
+                        title=_("Instance Stopped"), description=_(info_msg), success=True)
+
+
+    async def _stop_all_instances(self):
+        """Stop all instances that are currently running"""
+        # Start up all the auto load instances
+        for def_name in self._instances.keys():
+            await self._stop_instance(def_name)
+
+
+    async def _auto_load_instances(self):
+        """Start all specified instances for auto loading."""
+        # Start up all the auto load instances
+        for def_name in await self._conf.auto_loads():
+            await self._start_instance(await self.definition_name_information(def_name))
 
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs) -> None:
