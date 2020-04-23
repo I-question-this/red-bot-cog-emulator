@@ -230,7 +230,7 @@ class Emulator(commands.Cog):
             info_msg = "```\n"
             info_msg += f"{definition_name} has been stopped.\n"
             info_msg += "```\n"
-            return await self.send_message_to_registered_channels(definition_name, 
+            return await self._send_message_to_registered_channels(definition_name, 
                     title=_("Instance Stopped"), description=_(info_msg), success=True)
 
 
@@ -761,7 +761,7 @@ class Emulator(commands.Cog):
         return os.path.join(await self.screen_shots_save_dir(def_name), screen_shot_name)
 
 
-    async def send_message_to_registered_channels(self, definition_name:str, **kwargs) -> None:
+    async def _send_message_to_registered_channels(self, definition_name:str, **kwargs) -> None:
         """Send a message to every registered channel to the given definition name
 
         Parameters
@@ -825,7 +825,7 @@ class Emulator(commands.Cog):
         """
         screenshot_path = await self.screen_shots_save_path(definition_name, f"{datetime.now()}.gif")
         self._instances[definition_name].makeGIF(screenshot_path)
-        await self.send_message_to_registered_channels(
+        await self._send_message_to_registered_channels(
                 definition_name, filepath=screenshot_path, filename="gameplay.gif", **kwargs)
 
 
