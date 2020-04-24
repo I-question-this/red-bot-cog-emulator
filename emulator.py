@@ -893,14 +893,7 @@ class Emulator(commands.Cog):
                 self._instances[definition_name] = GameBoy()
 
             # Check that it's not already running.
-            if self._instances[definition_name].isRunning:
-                return await self._embed_msg(
-                        ctx,
-                        title=_("Already Running"),
-                        description=_(f"{definition_name} is already running."),
-                        success=True
-                    )
-            else:
+            if not self._instances[definition_name].isRunning:
                 game_defs = await self._conf.game_defs()
                 def_info = game_defs[definition_name]
                 # Start the emulator, but don't run it
