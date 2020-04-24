@@ -312,8 +312,79 @@ class Emulator(commands.Cog):
         await self._embed_msg(ctx, title=_("Defined Games"), description=_(info_msg), success=True)
 
 
-    @setup.command(name="set")
-    async def setup_set(self, ctx: commands.Context, name:str, bootROM:str, gameROM:str) -> None:
+    @setup.command(name="list_auto_loads", aliases=["list_als"])
+    async def setup_list_auto_loads(self, ctx: commands.Context) -> None:
+        """List names in the auto load list."""
+        info_msg ="```\n"
+        for al in await self._conf.auto_loads():
+            info_msg += f"{al}\n"
+        info_msg += "```"
+        return await self._embed_msg(ctx, title=_("Auto Load List"), description=_(info_msg),
+                success=True)
+
+
+    @setup.command(name="add_auto_load", aliases=["add_al"])
+    async def setup_add_auto_load(self, ctx: commands.Context, definition_name:str) -> None:
+        """Add a game definition to the auto load list.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name for this game definition to add to the auto load list.
+        """
+        if not await self.does_definition_name_exist(definition_name):
+            info_msg ="```\n"
+            info_msg += f"The name \"{definition_name}\" does not exist\n"
+            info_msg += "```"
+            return await self._embed_msg(ctx, title=_("Non-Existent Name"), description=_(info_msg),
+                    error=True)
+
+        auto_loads = await self._conf.auto_loads()
+        auto_loads.append(definition_name)
+        await self._conf.auto_loads.set(auto_loads)
+
+        info_msg ="```\n"
+        info_msg += f"Added \"{definition_name}\" to the auto load list\n"
+        info_msg += "```"
+        return await self._embed_msg(ctx, title=_("Added to List"), description=_(info_msg),
+                success=True)
+
+
+    @setup.command(name="delete_auto_load", aliases=["del_al"])
+    async def setup_delete_auto_load(self, ctx: commands.Context, definition_name:str) -> None:
+        """Delete a game definition to the auto load list.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name for this game definition to delete from the auto load list.
+        """
+        if not await self.does_definition_name_exist(definition_name):
+            info_msg ="```\n"
+            info_msg += "The name \"{definition_name}\" does not exist\n"
+            info_msg += "```"
+            return await self._embed_msg(ctx, title=_("Non-Existent Name"), description=_(info_msg),
+                    error=True)
+
+        auto_loads = await self._conf.auto_loads()
+        if not definition_name in auto_loads:
+            info_msg ="```\n"
+            info_msg += f"The name \"{definition_name}\" is not in the auto loads list.\n"
+            info_msg += "```"
+            return await self._embed_msg(ctx, title=_("Not in List"), description=_(info_msg),
+                    error=True)
+
+        await self._conf.auto_loads.set(list(filter(lambda dn: dn != definition_name, auto_loads)))
+
+        info_msg ="```\n"
+        info_msg += f"Removed \"{definition_name}\" from the auto load list\n"
+        info_msg += "```"
+        return await self._embed_msg(ctx, title=_("Removed from List"), description=_(info_msg),
+                success=True)
+
+
+    @setup.command(name="set_definition", aliases=["set_def"])
+    async def setup_set_definition(self, ctx: commands.Context, name:str, bootROM:str, gameROM:str) -> None:
         """Set a defined game.
 
         Parameters
@@ -363,8 +434,8 @@ class Emulator(commands.Cog):
         )
 
 
-    @setup.command(name="delete", aliases=["del"])
-    async def setup_delete(self, ctx: commands.Context, definition_name:str) -> None:
+    @setup.command(name="delete_definition", aliases=["del_def"])
+    async def setup_delete_definition(self, ctx: commands.Context, definition_name:str) -> None:
         """Delete a defined game
 
         Note that this does delete any files or folders.
@@ -525,7 +596,7 @@ class Emulator(commands.Cog):
         bool
             True if the definition name exists, False otherwise.
         """
-        return self.definition_name_information(definition_name) is not None
+        return await self.definition_name_information(definition_name) is not None
 
 
     async def filtered_registered_channel_ids(self, definition_name: str) -> AsyncIterator[int]:
