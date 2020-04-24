@@ -93,28 +93,27 @@ class Emulator(commands.Cog):
                 if self._instances.get(def_name, None) is None:
                     return
                 # Get rid of any capitalizations.
-                split_mess[0] = split_mess[0].lower()
+                button = split_mess[0].lower()
                 # Is the first word actually one of the buttons?
-                if split_mess[0] not in self._instances[def_name].buttonNames:
+                if button not in self._instances[def_name].buttonNames:
                     return
                 else:
-                    button = split_mess[0]
-                    if len(split_mess) == 3:
-                        split_mess[1] = split_mess[1].lower()
-                        if split_mess[1] == 'p' or split_mess[1] == 'h':
-                            action = split_mess[1]
-                            try:
-                                num = min(3, int(split_mess[2]))
-                                if num <= 0:
-                                    num = 1
-                            except ValueError:
-                                num = 1
-                        else:
-                            action = 'p'
-                            num = 1
+                    if len(split_mess) != 3:
+                        return
                     else:
-                        action = 'p'
-                        num = 1
+                        action = split_mess[1].lower()
+                        if action == 'p':
+                            try:
+                                num = min(3, max(1, int(split_mess[2])))
+                            except ValueError:
+                                return
+                        elif action == 'h':
+                            try:
+                                num = min(3, max(0.5, float(split_mess[2])))
+                            except ValueError:
+                                return
+                        else:
+                            return
 
             # Only one may press the button.
             if not self._locks[def_name].locked():
