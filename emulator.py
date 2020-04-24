@@ -991,6 +991,7 @@ class Emulator(commands.Cog):
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs) -> None:
         """Assemble and send an embedded message.
+        Credit for this goes to the Audio cog within the core RedBot cogs.
 
         Parameters
         ----------
