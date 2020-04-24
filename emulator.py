@@ -33,9 +33,9 @@ log = logging.getLogger("red.emulator")
 
 _DEFAULT_GLOBAL = {
     "local_path": None,
-    "game_defs": [],
-    "registerd_channels": [],
-    "auto_saves": [],
+    "game_defs": {},
+    "channels_to_defs": {},
+    "defs_to_channels": {},
     "auto_loads": []
 }
 
@@ -81,59 +81,56 @@ class Emulator(commands.Cog):
             return
 
 
-        registerd_channels = await self._conf.registerd_channels()
-        for channel_id, def_name in registerd_channels:
-            if message.channel.id == channel_id:
-                # They're talking to a specific instance, but is it important?
-                split_mess = message.content.split(" ")
-                if len(split_mess) > 3:
+        channels_to_defs = await self._conf.channels_to_defs()
+        def_name = channels_to_defs.get(str(message.channel.id), None)
+        if def_name is not None:
+            # They're talking to a specific instance, but is it important?
+            split_mess = message.content.split(" ")
+            if len(split_mess) > 3:
+                return
+            else:
+                # Is there an instance?
+                if self._instances.get(def_name, None) is None:
+                    return
+                # Get rid of any capitalizations.
+                split_mess[0] = split_mess[0].lower()
+                # Is the first word actually one of the buttons?
+                if split_mess[0] not in self._instances[def_name].buttonNames:
                     return
                 else:
-                    # Is there an instance?
-                    if self._instances.get(def_name, None) is None:
-                        return
-                    # Get rid of any capitalizations.
-                    split_mess[0] = split_mess[0].lower()
-                    # Is the first word actually one of the buttons?
-                    if split_mess[0] not in self._instances[def_name].buttonNames:
-                        return
-                    else:
-                        button = split_mess[0]
-                        if len(split_mess) == 3:
-                            split_mess[1] = split_mess[1].lower()
-                            if split_mess[1] == 'p' or split_mess[1] == 'h':
-                                action = split_mess[1]
-                                try:
-                                    num = min(3, int(split_mess[2]))
-                                    if num <= 0:
-                                        num = 1
-                                except ValueError:
+                    button = split_mess[0]
+                    if len(split_mess) == 3:
+                        split_mess[1] = split_mess[1].lower()
+                        if split_mess[1] == 'p' or split_mess[1] == 'h':
+                            action = split_mess[1]
+                            try:
+                                num = min(3, int(split_mess[2]))
+                                if num <= 0:
                                     num = 1
-                            else:
-                                action = 'p'
+                            except ValueError:
                                 num = 1
                         else:
                             action = 'p'
                             num = 1
+                    else:
+                        action = 'p'
+                        num = 1
 
-                if not self._locks[def_name].locked():
-                    # Only one may press the button.
-                    async with self._locks[def_name]:
-                        if action == 'p':
-                            # Press button X times
-                            for n in range(num):
-                                self._instances[def_name].pressButton(button)
-                            self._instances[def_name].runForXSeconds(10)
-                            await self._save_main_state_file(def_name)
-                            await self._send_screenshot(def_name,
-                                    title=_(f"{author.display_name} pressed \"{button}\" {num} time(s)"))
-                        elif action == 'h':
-                            # Hold button for X seconds
-                            self._instances[def_name].holdButton(button, num)
-                            self._instances[def_name].runForXSeconds(10)
-                            await self._save_main_state_file(def_name)
-                            await self._send_screenshot(def_name,
-                                    title=_(f"{author.display_name} held \"{button}\" for {num} second(s)"))
+            # Only one may press the button.
+            if not self._locks[def_name].locked():
+                async with self._locks[def_name]:
+                    if action == 'p':
+                        # Press button X times
+                        for n in range(num):
+                            self._instances[def_name].pressButton(button)
+                        title = f"{author.display_name} pressed \"{button}\" {num} time(s)"
+                    elif action == 'h':
+                        # Hold button for X seconds
+                        self._instances[def_name].holdButton(button, num)
+                        title=f"{author.display_name} held \"{button}\" for {num} second(s)"
+                    self._instances[def_name].runForXSeconds(10)
+                    await self._save_main_state_file(def_name)
+                    await self._send_screenshot(def_name, title=_(title))
 
 
     # Commands
@@ -153,24 +150,29 @@ class Emulator(commands.Cog):
         definition_name: str
             Name of the game to register this channel to.
         """
-        if not await self.does_definition_name_exist(definition_name):
+        game_defs = await self._conf.game_defs()
+        if game_defs.get(definition_name, None) is None: 
             info_msg = "```\n"
             info_msg += f"{definition_name} does not exist\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
                     description=_(info_msg), error=True)
 
-        registerd_channels = await self._conf.registerd_channels()
-        for channel_id, def_name in registerd_channels:
-            if ctx.channel.id == channel_id:
-                info_msg = "```\n"
-                info_msg += f"This channel is already registered to \"{def_name}\"\n"
-                info_msg += "```\n"
-                return await self._embed_msg(ctx, title=_("Channel Already Register"),
-                        description=_(info_msg), error=True)
+        channels_to_defs = await self._conf.channels_to_defs()
+        if str(ctx.channel.id) in channels_to_defs.keys():
+            info_msg = "```\n"
+            info_msg += f"This channel is already registered to \"{def_name}\"\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Channel Already Register"),
+                    description=_(info_msg), error=True)
 
-        registerd_channels.append([ctx.channel.id, definition_name])
-        await self._conf.registerd_channels.set(registerd_channels)
+        # Register to both
+        channels_to_defs[str(ctx.channel.id)] = definition_name
+        await self._conf.channels_to_defs.set(channels_to_defs)
+        defs_to_channels = await self._conf.defs_to_channels()
+        defs_to_channels[definition_name].append(ctx.channel.id)
+        await self._conf.defs_to_channels.set(defs_to_channels)
+        # Inform of success
         info_msg = "```\n"
         info_msg += f"Registered this channel to \"{definition_name}\"\n"
         info_msg += "```\n"
@@ -182,22 +184,27 @@ class Emulator(commands.Cog):
     @setup.command(name="unregister")
     async def setup_unregister(self, ctx: commands.Context):
         """Unregiseter the channel this message is sent from."""
-        registerd_channels = await self._conf.registerd_channels()
-        for channel_id, def_name in registerd_channels:
-            if ctx.channel.id == channel_id:
-                info_msg = "```\n"
-                info_msg += f"This channel has been unregistered from \"{def_name}\"\n"
-                info_msg += "```\n"
-                await self._conf.registerd_channels.set(
-                        list(filter(lambda rc: rc[0] != ctx.channel.id, registerd_channels)))
-                return await self._embed_msg(ctx, title=_("Channel Unregistered"),
-                        description=_(info_msg), success=True)
+        channels_to_defs = await self._conf.channels_to_defs()
+        if str(ctx.channel.id) not in channels_to_defs.keys():
+            info_msg = "```\n"
+            info_msg += f"This channel isn't registered to anything\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Channel Not Registered"),
+                    description=_(info_msg), error=True)
+        
+        def_name = channels_to_defs[str(ctx.channel.id)]
+        del channels_to_defs[str(ctx.channel.id)]
+        await self._conf.channels_to_defs.set(channels_to_defs)
+        defs_to_channels = await self._conf.defs_to_channels()
+        defs_to_channels[def_name] = list(filter(lambda c_id: c_id != ctx.channel.id, defs_to_channels[def_name]))
+        await self._conf.defs_to_channels.set(defs_to_channels)
 
+        # Inform of success
         info_msg = "```\n"
-        info_msg += f"This channel isn't registered to anything\n"
+        info_msg += f"This channel has been unregistered from \"{def_name}\"\n"
         info_msg += "```\n"
-        return await self._embed_msg(ctx, title=_("Channel Not Registered"),
-                description=_(info_msg), error=True)
+        return await self._embed_msg(ctx, title=_("Channel Unregistered"),
+                description=_(info_msg), success=True)
 
 
     @setup.command(name="stop")
@@ -209,15 +216,15 @@ class Emulator(commands.Cog):
         definition_name: str
             Name of the game to stop.
         """
-        def_info = await self.definition_name_information(definition_name)
-        if def_info is None:
+        game_defs = await self._conf.game_defs()
+        if definition_name not in game_defs.keys():
             info_msg = "```\n"
             info_msg += f"{definition_name} does not exist\n"
             info_msg += "```\n"
             return await self._embed_msg(ctx, title=_("Improper Definition Name"),
                     description=_(info_msg), error=True)
 
-        # Does an instance acutally exist?
+        # Does an instance actually exist?
         if self._instances.get(definition_name, None) is None:
             info_msg = "```\n"
             info_msg += f"{definition_name} has no instance running\n"
@@ -251,8 +258,8 @@ class Emulator(commands.Cog):
         definition_name: str
             Name of the game to start.
         """
-        def_info = await self.definition_name_information(definition_name)
-        if def_info is None:
+        game_defs = await self._conf.game_defs()
+        if definition_name not in game_defs.keys():
             info_msg = "```\n"
             info_msg += f"{definition_name} does not exist\n"
             info_msg += "```\n"
@@ -268,7 +275,7 @@ class Emulator(commands.Cog):
                 return await self._embed_msg(ctx, title=_("Instance is Already Running"),
                         description=_(info_msg), error=True)
 
-        await self._start_instance(def_info)
+        await self._start_instance(definition_name)
 
 
     @setup.command(name="start_auto")
@@ -301,13 +308,14 @@ class Emulator(commands.Cog):
     async def setup_definitions(self, ctx: commands.Context) -> None:
         """List defined games."""
         info_msg = "```\n"
-        if len(await self._conf.game_defs()) == 0:
+        game_defs = await self._conf.game_defs()
+        if len(game_defs) == 0:
             info_msg += "NONE"
         else:
-            for definition in await self._conf.game_defs():
-                info_msg += f"{definition[0]}:\n"
-                info_msg += f"\t|__Boot ROM: {definition[1]}\n"
-                info_msg += f"\t|__Game ROM: {definition[2]}\n"
+            for definition in game_defs.keys():
+                info_msg += f"{definition}:\n"
+                info_msg += f"\t|__Boot ROM: {game_defs[definition]['bootROM']}\n"
+                info_msg += f"\t|__Game ROM: {game_defs[definition]['gameROM']}\n"
         info_msg += "```" 
         await self._embed_msg(ctx, title=_("Defined Games"), description=_(info_msg), success=True)
 
@@ -332,7 +340,8 @@ class Emulator(commands.Cog):
         definition_name: str
             Name for this game definition to add to the auto load list.
         """
-        if not await self.does_definition_name_exist(definition_name):
+        game_defs = await self._conf.game_defs()
+        if definition_name not in game_defs.keys():
             info_msg ="```\n"
             info_msg += f"The name \"{definition_name}\" does not exist\n"
             info_msg += "```"
@@ -359,7 +368,8 @@ class Emulator(commands.Cog):
         definition_name: str
             Name for this game definition to delete from the auto load list.
         """
-        if not await self.does_definition_name_exist(definition_name):
+        game_defs = await self._conf.game_defs()
+        if definition_name not in game_defs.keys():
             info_msg ="```\n"
             info_msg += "The name \"{definition_name}\" does not exist\n"
             info_msg += "```"
@@ -384,7 +394,7 @@ class Emulator(commands.Cog):
 
 
     @setup.command(name="set_definition", aliases=["set_def"])
-    async def setup_set_definition(self, ctx: commands.Context, name:str, bootROM:str, gameROM:str) -> None:
+    async def setup_set_definition(self, ctx: commands.Context, definition_name:str, bootROM:str, gameROM:str) -> None:
         """Set a defined game.
 
         Parameters
@@ -415,17 +425,20 @@ class Emulator(commands.Cog):
 
         # Check that this name has not already been used
         game_defs = await self._conf.game_defs()
-        for definition in game_defs:
-            if definition[0] == name:
-                return await self._embed_msg(
-                    ctx,
-                    title=_("Name Conflict"),
-                    description=_(f"{name} already exist as a name."),
-                    error=True
-                )
+        if definition_name in game_defs.keys():
+            return await self._embed_msg(
+                ctx,
+                title=_("Name Conflict"),
+                description=_(f"{definition_name} already exist as a name."),
+                error=True
+            )
         # Set the definition
-        game_defs.append((name, bootROM, gameROM))
+        game_defs[definition_name] = {"bootROM": bootROM, "gameROM": gameROM}
         await self._conf.game_defs.set(game_defs)
+        # Create the list of registered channels
+        defs_to_channels = await self._conf.defs_to_channels()
+        defs_to_channels[definition_name] = list()
+        await self._conf.defs_to_channels.set(defs_to_channels)
         return await self._embed_msg(
             ctx,
             title=_("Saved Definition"),
@@ -445,38 +458,56 @@ class Emulator(commands.Cog):
         definition_name: str
             Name of the game to delete.
         """
-        for definition in await self._conf.game_defs():
-            if definition[0] == definition_name:
-                info_msg = _(
-                        "Are you sure you want to delete?:\n"
-                        "```\n"
-                        f"{definition[0]}\n"
-                        "```\n"
-                        )
-                info = await ctx.maybe_send_embed(info_msg)
-                start_adding_reactions(info, ReactionPredicate.YES_OR_NO_EMOJIS)
-                pred = ReactionPredicate.yes_or_no(info, ctx.author)
-                await ctx.bot.wait_for("reaction_add", check=pred)
-                # If user said no
-                if not pred.result:
-                    with contextlib.suppress(discord.HTTPException):
-                        await info.delete()
-                    return
-                else:
-                    await self._conf.game_defs.set(list(filter(lambda d: d[0] != definition_name, await self._conf.game_defs())))
-                return await self._embed_msg(
-                    ctx,
-                    title=_("Deletion Successful"),
-                    description=_(f"{definition_name} has been deleted."),
-                    success=True
-                )
+        game_defs = await self._conf.game_defs()
+        if definition_name not in game_defs.keys():
+            return await self._embed_msg(
+                ctx,
+                title=_("No Such Definition"),
+                description=_(f"{name} does not exist."),
+                error=True
+            )
 
-        return await self._embed_msg(
-            ctx,
-            title=_("No Such Definition"),
-            description=_(f"{name} does not exist."),
-            error=True
-        )
+        # Ask the user if they are really sure about this
+        info_msg = _(
+                "Are you sure you want to delete?:\n"
+                "```\n"
+                f"{definition_name}\n"
+                "```\n"
+                )
+        info = await ctx.maybe_send_embed(info_msg)
+        start_adding_reactions(info, ReactionPredicate.YES_OR_NO_EMOJIS)
+        pred = ReactionPredicate.yes_or_no(info, ctx.author)
+        await ctx.bot.wait_for("reaction_add", check=pred)
+        # If user said no
+        if not pred.result:
+            with contextlib.suppress(discord.HTTPException):
+                await info.delete()
+            return
+        else:
+            # If an instance is running, shut it down
+            if self._locks.get(definition_name, None) is not None:
+                async with self._locks[definition_name]:
+                    if self._instances.get(definition_name, None) is not None:
+                        if self._instances[definition_name].isRunning():
+                            self._instances[definition_name].stop()
+            # Delete it from the list
+            del game_defs[definition_name]
+            await self._conf.game_defs.set(game_defs)
+            # Delete the channel registrations
+            defs_to_channels = await self._conf.defs_to_channels()
+            channels_to_defs = await self._conf.channels_to_defs()
+            for channel_id in channels_to_defs.keys():
+                del channels_to_defs[channel_id]
+            await self._conf.channels_to_defs.set(channels_to_defs)
+            del defs_to_channels[definition_name]
+            await self._conf.defs_to_channels.set(defs_to_channels)
+            # Report success
+            return await self._embed_msg(
+                ctx,
+                title=_("Deletion Successful"),
+                description=_(f"{definition_name} has been deleted."),
+                success=True
+            )
 
 
     @setup.command(name="localpath")
@@ -558,82 +589,7 @@ class Emulator(commands.Cog):
             )
 
 
-
     # Helper Functions
-    async def definition_name_information(self, definition_name: str) -> List[str]:
-        """Returns the information for the given definition name
-
-        Parameters
-        ----------
-        definition_name: str
-            The name to find the information for.
-            If it doesn't exist it will return None
-
-        Returns
-        -------
-        list[str, str, str]
-            A three item list describing a game.
-            0: name
-            1: boot ROM
-            2: game ROM
-        """
-        for definition in await self._conf.game_defs():
-            if definition[0] == definition_name:
-                return definition
-        return None
-
-
-    async def does_definition_name_exist(self, definition_name: str) -> bool:
-        """Returns True if definition_name exists, false otherwise.
-
-        Parameters
-        ----------
-        definition_name: str
-            The name to determne the existence of.
-
-        Returns
-        -------
-        bool
-            True if the definition name exists, False otherwise.
-        """
-        return await self.definition_name_information(definition_name) is not None
-
-
-    async def filtered_registered_channel_ids(self, definition_name: str) -> AsyncIterator[int]:
-        """Returns a generator of the registered channel ids for the given definition name
-
-        Parameters
-        ----------
-        definition_name: str
-            The name to find the regiestered channel ids for.
-
-        Yields
-        ------
-        int
-            Channel id number
-        """
-        for channel_id, def_name in await self._conf.registerd_channels():
-            if def_name == definition_name:
-                yield channel_id
-
-
-    async def filtered_registered_channels(self, definition_name: str) -> AsyncIterator[int]:
-        """Returns a generator of the registered channel objects for the given definition name
-
-        Parameters
-        ----------
-        definition_name: str
-            The name to find the regiestered channel objects for.
-        
-        Yields
-        ------
-        Channel
-            Channel object that is regiesterd to the given definition name.
-        """
-        async for channel_id in self.filtered_registered_channel_ids(definition_name):
-            yield self.bot.get_channel(channel_id)
-
-
     # Path Related Functions
     async def gb_path(self) -> str:
         """Return '<local_path>/gb'
@@ -831,12 +787,13 @@ class Emulator(commands.Cog):
         """
         filepath = kwargs.get("filepath")
         filename = kwargs.get("filename")
-        async for channel in self.filtered_registered_channels(definition_name):
+        defs_to_channels = await self._conf.defs_to_channels()
+        for channel_id in defs_to_channels[definition_name]:
             if filepath:
                 file = discord.File(filepath, filename=filename)
             else:
                 file = None
-            await self._embed_msg(channel, file=file, **kwargs)
+            await self._embed_msg(self.bot.get_channel(channel_id), file=file, **kwargs)
 
 
     async def _save_main_state_file(self, definition_name: str) -> None:
@@ -910,48 +867,58 @@ class Emulator(commands.Cog):
         return msg
 
 
-    async def _start_instance(self, def_info:list):
+    async def _start_instance(self, definition_name:str):
         """Start the given game.
 
         Parameters
         ----------
-        def_info: list
-            List of the definition name, bootROM, and gameROM.
+        definition_name: str
+            The name of the game being started
         """
         # Lock it up, just in case someone jumps the gun.
-        if self._locks.get(def_info[0], None) is None:
-            self._locks[def_info[0]] = asyncio.Lock()
-        async with self._locks[def_info[0]]:
+        if self._locks.get(definition_name, None) is None:
+            self._locks[definition_name] = asyncio.Lock()
+        async with self._locks[definition_name]:
             # Perhaps the first time so create the folders.
-            if not os.path.exists(await self.saves_definition_dir(def_info[0])):
-                os.mkdir(await self.saves_definition_dir(def_info[0]))
+            if not os.path.exists(await self.saves_definition_dir(definition_name)):
+                os.mkdir(await self.saves_definition_dir(definition_name))
 
-            if not os.path.exists(await self.state_save_dir(def_info[0])):
-                os.mkdir(await self.state_save_dir(def_info[0]))
+            if not os.path.exists(await self.state_save_dir(definition_name)):
+                os.mkdir(await self.state_save_dir(definition_name))
 
-            if not os.path.exists(await self.screen_shots_save_dir(def_info[0])):
-                os.mkdir(await self.screen_shots_save_dir(def_info[0]))
+            if not os.path.exists(await self.screen_shots_save_dir(definition_name)):
+                os.mkdir(await self.screen_shots_save_dir(definition_name))
 
             # Does an instance already exist?
-            if self._instances.get(def_info[0], None) is None:
-                self._instances[def_info[0]] = GameBoy()
+            if self._instances.get(definition_name, None) is None:
+                self._instances[definition_name] = GameBoy()
 
             # Check that it's not already running.
-            if not self._instances[def_info[0]].isRunning:
+            if self._instances[definition_name].isRunning:
+                return await self._embed_msg(
+                        ctx,
+                        title=_("Already Running"),
+                        description=_(f"{definition_name} is already running."),
+                        success=True
+                    )
+            else:
+                game_defs = await self._conf.game_defs()
+                def_info = game_defs[definition_name]
                 # Start the emulator, but don't run it
-                self._instances[def_info[0]].start(
-                        bootROMPath=await self.bootROM_path(def_info[1]),
-                        gameROMPath=await self.gameROM_path(def_info[2]),
+                self._instances[definition_name].start(
+                        bootROMPath=await self.bootROM_path(def_info["bootROM"]),
+                        gameROMPath=await self.gameROM_path(def_info["gameROM"]),
                         numberOfSecondsToRun=0
                     )
                 # Load the state file, if it exists
-                await self._load_main_state_file(def_info[0])
+                await self._load_main_state_file(definition_name)
                 # Now run the emulator 
-                self._instances[def_info[0]].runForXSeconds(60)
+                self._instances[definition_name].runForXSeconds(60)
 
                 # Send a screenshot
-                await self._send_screenshot(def_info[0], title=_(f"Started \"{def_info[0]}\""),
-                        description=_(self._button_usage_message(def_info[0])))
+                await self._send_screenshot(definition_name,
+                        title=_(f"Started \"{definition_name}\""),
+                        description=_(self._button_usage_message(definition_name)))
 
 
     async def _stop_instance(self, definition_name:str):
@@ -986,7 +953,7 @@ class Emulator(commands.Cog):
         """Start all specified instances for auto loading."""
         # Start up all the auto load instances
         for def_name in await self._conf.auto_loads():
-            await self._start_instance(await self.definition_name_information(def_name))
+            await self._start_instance(def_name)
 
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs) -> None:
