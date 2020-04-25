@@ -284,6 +284,86 @@ class Emulator(commands.Cog):
         await self._auto_load_instances()
 
 
+    @commands.is_owner()
+    @setup.command(name="set_press_max")
+    async def setup_set_press_max(self, ctx: commands.Context, definition_name:str, press_max:int) -> None:
+        """Set the max for button pressing.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name of the game to register this channel to.
+        press_max: int
+            New maximum button pressing.
+        """
+        game_defs = await self._conf.game_defs()
+        if game_defs.get(definition_name, None) is None: 
+            info_msg = "```\n"
+            info_msg += f"{definition_name} does not exist\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Improper Definition Name"),
+                    description=_(info_msg), error=True)
+
+        # Sanity check value
+        if press_max < 1:
+            info_msg = "```\n"
+            info_msg += f"{press_max} is less than 1, which is not allowed\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Invalid New Press Max"),
+                    description=_(info_msg), error=True)
+
+        # Set new max
+        game_defs[definition_name]["pressMax"] = press_max
+        await self._conf.game_defs.set(game_defs)
+
+        # Inform of success
+        info_msg = "```\n"
+        info_msg += f"Set press max for \"{definition_name}\" to {press_max}\n"
+        info_msg += "```\n"
+        return await self._embed_msg(ctx, title=_("Press Max Updated"),
+                description=_(info_msg), success=True)
+
+
+    @commands.is_owner()
+    @setup.command(name="set_hold_max")
+    async def setup_set_hold_max(self, ctx: commands.Context, definition_name:str, hold_max:float) -> None:
+        """Set the max for button holding.
+
+        Parameters
+        ----------
+        definition_name: str
+            Name of the game to register this channel to.
+        hold_max: int
+            New maximum button holding.
+        """
+        game_defs = await self._conf.game_defs()
+        if game_defs.get(definition_name, None) is None: 
+            info_msg = "```\n"
+            info_msg += f"{definition_name} does not exist\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Improper Definition Name"),
+                    description=_(info_msg), error=True)
+
+        # Sanity check value
+        if hold_max < 0.5:
+            info_msg = "```\n"
+            info_msg += f"{hold_max} is less than 0.5, which is not allowed\n"
+            info_msg += "```\n"
+            return await self._embed_msg(ctx, title=_("Invalid New Hold Max"),
+                    description=_(info_msg), error=True)
+
+        # Set new max
+        game_defs[definition_name]["holdMax"] = hold_max
+        await self._conf.game_defs.set(game_defs)
+
+        # Inform of success
+        info_msg = "```\n"
+        info_msg += f"Set hold max for \"{definition_name}\" to {hold_max}\n"
+        info_msg += "```\n"
+        return await self._embed_msg(ctx, title=_("Hold Max Updated"),
+                description=_(info_msg), success=True)
+
+
     @setup.command(name="ROMs", aliases=["roms"])
     async def setup_roms(self, ctx: commands.Context):
         """List available ROMs"""
