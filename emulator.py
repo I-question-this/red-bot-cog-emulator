@@ -92,6 +92,7 @@ class Emulator(commands.Cog):
                 # Is there an instance?
                 if self._instances.get(def_name, None) is None:
                     return
+                game_defs = await self._conf.game_defs()
                 # Get rid of any capitalizations.
                 button = split_mess[0].lower()
                 # Is the first word actually one of the buttons?
@@ -104,12 +105,12 @@ class Emulator(commands.Cog):
                         action = split_mess[1].lower()
                         if action == 'p':
                             try:
-                                num = min(3, max(1, int(split_mess[2])))
+                                num = min(game_defs[def_name]["pressMax"], max(1, int(split_mess[2])))
                             except ValueError:
                                 return
                         elif action == 'h':
                             try:
-                                num = min(3, max(0.5, float(split_mess[2])))
+                                num = min(game_defs[def_name]["holdMax"], max(0.5, float(split_mess[2])))
                             except ValueError:
                                 return
                         else:
@@ -432,7 +433,7 @@ class Emulator(commands.Cog):
                 error=True
             )
         # Set the definition
-        game_defs[definition_name] = {"bootROM": bootROM, "gameROM": gameROM}
+        game_defs[definition_name] = {"bootROM": bootROM, "gameROM": gameROM, "pressMax": 3, "holdMax": 3.0}
         await self._conf.game_defs.set(game_defs)
         # Create the list of registered channels
         defs_to_channels = await self._conf.defs_to_channels()
@@ -841,7 +842,7 @@ class Emulator(commands.Cog):
                 definition_name, filepath=screenshot_path, filename="gameplay.gif", **kwargs)
 
 
-    def _button_usage_message(self, definition_name:str) -> str:
+    async def _button_usage_message(self, definition_name:str) -> str:
         """Construct a help message to interacting with the emulator of the given definition name.
 
         Parameters
@@ -856,11 +857,18 @@ class Emulator(commands.Cog):
         str
             Help message.
         """
+        game_defs = await self._conf.game_defs()
         msg = "```\n"
         msg += "Usage:\n"
-        msg += "<button> := press <button> once\n"
-        msg += "<button> p <number> := press <button> <number> times (max: 3)\n"
-        msg += "<button> h <number> := hold <button> for <number> seconds (max: 3)\n"
+        msg += "---------------------------\n"
+        msg += "<button> p <number>\n"
+        msg += "press <button> <number> times\n"
+        msg += f"min: 1; max: {game_defs[definition_name]['pressMax']}\n"
+        msg += "---------------------------\n"
+        msg += "<button> h <number>\n"
+        msg += "hold <button> for <number> seconds\n"
+        msg += f"min: 0.5; max: {game_defs[definition_name]['holdMax']}\n"
+        msg += "---------------------------\n"
         msg += f"Buttons: ({', '.join(sorted(self._instances[definition_name].buttonNames))})\n"
         msg += "```\n"
         return msg
@@ -910,7 +918,7 @@ class Emulator(commands.Cog):
                 # Send a screenshot
                 await self._send_screenshot(definition_name,
                         title=_(f"Started \"{definition_name}\""),
-                        description=_(self._button_usage_message(definition_name)))
+                        description=_(await self._button_usage_message(definition_name)))
 
 
     async def _stop_instance(self, definition_name:str):
