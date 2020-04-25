@@ -70,9 +70,23 @@ class GameBoy(AbastractEmulator):
     )
     self._registerButton(
       ButtonCode(
+        "Se",
+        windowevent.PRESS_BUTTON_SELECT,
+        windowevent.RELEASE_BUTTON_SELECT
+      )
+    )
+    self._registerButton(
+      ButtonCode(
         "Select",
         windowevent.PRESS_BUTTON_SELECT,
         windowevent.RELEASE_BUTTON_SELECT
+      )
+    )
+    self._registerButton(
+      ButtonCode(
+        "St",
+        windowevent.PRESS_BUTTON_START,
+        windowevent.RELEASE_BUTTON_START
       )
     )
     self._registerButton(
@@ -84,9 +98,23 @@ class GameBoy(AbastractEmulator):
     )
     self._registerButton(
       ButtonCode(
+        "U",
+        windowevent.PRESS_ARROW_UP,
+        windowevent.RELEASE_ARROW_UP
+      )
+    )
+    self._registerButton(
+      ButtonCode(
         "Up",
         windowevent.PRESS_ARROW_UP,
         windowevent.RELEASE_ARROW_UP
+      )
+    )
+    self._registerButton(
+      ButtonCode(
+        "D",
+        windowevent.PRESS_ARROW_DOWN,
+        windowevent.RELEASE_ARROW_DOWN
       )
     )
     self._registerButton(
@@ -98,9 +126,23 @@ class GameBoy(AbastractEmulator):
     )
     self._registerButton(
       ButtonCode(
+        "L",
+        windowevent.PRESS_ARROW_LEFT,
+        windowevent.RELEASE_ARROW_LEFT
+      )
+    )
+    self._registerButton(
+      ButtonCode(
         "Left",
         windowevent.PRESS_ARROW_LEFT,
         windowevent.RELEASE_ARROW_LEFT
+      )
+    )
+    self._registerButton(
+      ButtonCode(
+        "R",
+        windowevent.PRESS_ARROW_RIGHT,
+        windowevent.RELEASE_ARROW_RIGHT
       )
     )
     self._registerButton(
