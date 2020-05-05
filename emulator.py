@@ -1049,7 +1049,7 @@ class Emulator(commands.Cog):
         re.Pattern
             A pattern that breaks input into "button", "action", and "number".
         """
-        re_button = r"(?P<button>(" + r")|(".join(self._instances[def_name].buttonNames) + r"))"
+        re_button = r"(?P<button>" + r"|".join(self._instances[def_name].buttonNames) + r")"
         re_action = r"(?P<action>(p)|(h))"
         re_number = r"(?P<number>\d(\.\d)?)"
         re_string = r"\A\W*" + r"\W+".join([re_button, re_action, re_number]) + r"\W*\Z"
