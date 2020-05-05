@@ -9,6 +9,7 @@ from datetime import datetime
 import discord
 from discord.embeds import EmptyEmbed
 import logging
+import re
 import os
 from typing import AsyncIterator, List
 from .gameBoy import GameBoy
@@ -52,6 +53,7 @@ class Emulator(commands.Cog):
         self._conf.register_global(**_DEFAULT_GLOBAL)
         self._instances = {}
         self._locks = {}
+        self._patterns = {}
 
     
     @commands.Cog.listener()
@@ -84,53 +86,48 @@ class Emulator(commands.Cog):
         channels_to_defs = await self._conf.channels_to_defs()
         def_name = channels_to_defs.get(str(message.channel.id), None)
         if def_name is not None:
-            # They're talking to a specific instance, but is it important?
-            split_mess = message.content.split(" ")
-            if len(split_mess) > 3:
+            # Is there an instance?
+            if self._instances.get(def_name, None) is None:
                 return
-            else:
-                # Is there an instance?
-                if self._instances.get(def_name, None) is None:
-                    return
+            # Is it running?
+            if not self._instances[def_name].isRunning:
+                return
+            # They're talking to an existing instance, but is it important?
+            match = self._patterns[def_name].match(message.content)
+            if match is not None:
+                # It's valid input
                 game_defs = await self._conf.game_defs()
                 # Get rid of any capitalizations.
-                button = split_mess[0].lower()
-                # Is the first word actually one of the buttons?
-                if button not in self._instances[def_name].buttonNames:
-                    return
-                else:
-                    if len(split_mess) != 3:
+                button = match.group("button").lower()
+                action = match.group("action").lower()
+                if action == 'p':
+                    try:
+                        num = min(game_defs[def_name]["pressMax"], max(1, int(float(match.group("number")))))
+                    except ValueError:
                         return
-                    else:
-                        action = split_mess[1].lower()
-                        if action == 'p':
-                            try:
-                                num = min(game_defs[def_name]["pressMax"], max(1, int(split_mess[2])))
-                            except ValueError:
-                                return
-                        elif action == 'h':
-                            try:
-                                num = min(game_defs[def_name]["holdMax"], max(0.5, float(split_mess[2])))
-                            except ValueError:
-                                return
-                        else:
-                            return
+                elif action == 'h':
+                    try:
+                        num = min(game_defs[def_name]["holdMax"], max(0.5, float(match.group("number"))))
+                    except ValueError:
+                        return
+                else:
+                    raise ValueError(f"Unknown action was received: {action}")
 
-            # Only one may press the button.
-            if not self._locks[def_name].locked():
-                async with self._locks[def_name]:
-                    if action == 'p':
-                        # Press button X times
-                        for n in range(num):
-                            self._instances[def_name].pressButton(button)
-                        title = f"{author.display_name} pressed \"{button}\" {num} time(s)"
-                    elif action == 'h':
-                        # Hold button for X seconds
-                        self._instances[def_name].holdButton(button, num)
-                        title=f"{author.display_name} held \"{button}\" for {num} second(s)"
-                    self._instances[def_name].runForXSeconds(10)
-                    await self._save_main_state_file(def_name)
-                    await self._send_screenshot(def_name, title=_(title))
+                # Only one may press the button.
+                if not self._locks[def_name].locked():
+                    async with self._locks[def_name]:
+                        if action == 'p':
+                            # Press button X times
+                            for n in range(num):
+                                self._instances[def_name].pressButton(button)
+                            title = f"{author.display_name} pressed \"{button}\" {num} time(s)"
+                        elif action == 'h':
+                            # Hold button for X seconds
+                            self._instances[def_name].holdButton(button, num)
+                            title=f"{author.display_name} held \"{button}\" for {num} second(s)"
+                        self._instances[def_name].runForXSeconds(10)
+                        await self._save_main_state_file(def_name)
+                        await self._send_screenshot(def_name, title=_(title))
 
 
     # Commands
@@ -980,6 +977,10 @@ class Emulator(commands.Cog):
             if self._instances.get(definition_name, None) is None:
                 self._instances[definition_name] = GameBoy()
 
+            # Does a pattern for this already exist?
+            if self._patterns.get(definition_name, None) is None:
+                self._patterns[definition_name] = self._create_regex_pattern(definition_name)
+
             # Check that it's not already running.
             if not self._instances[definition_name].isRunning:
                 game_defs = await self._conf.game_defs()
@@ -1034,6 +1035,26 @@ class Emulator(commands.Cog):
         # Start up all the auto load instances
         for def_name in await self._conf.auto_loads():
             await self._start_instance(def_name)
+
+
+    def _create_regex_pattern(self, def_name:str) -> re.Pattern:
+        """Create a regex pattern for a specific emulator
+
+        Parameters
+        ----------
+        def_name: str
+            The definition name to create a regex pattern for.
+
+        Returns
+        -------
+        re.Pattern
+            A pattern that breaks input into "button", "action", and "number".
+        """
+        re_button = r"(?P<button>(" + r")|(".join(self._instances[def_name].buttonNames) + r"))"
+        re_action = r"(?P<action>(p)|(h))"
+        re_number = r"(?P<number>\d(\.\d)?)"
+        re_string = r"\A\W*" + r"\W+".join([re_button, re_action, re_number]) + r"\W*\Z"
+        return re.compile(re_string, re.IGNORECASE)
 
 
     async def _embed_msg(self, ctx: commands.Context, **kwargs) -> None:
