@@ -82,7 +82,6 @@ class Emulator(commands.Cog):
         if await self.bot.is_automod_immune(message):
             return
 
-
         channels_to_defs = await self._conf.channels_to_defs()
         def_name = channels_to_defs.get(str(message.channel.id), None)
         if def_name is not None:
